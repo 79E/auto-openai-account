@@ -12,3 +12,17 @@
   background-size: 1.1rem;
   padding-right: 2.5rem;
 }
+
+:global([data-theme="dark"]) .input {
+  border-color: rgb(51 65 85 / 0.82);
+  background-color: rgb(15 23 42 / 0.86);
+  color: rgb(226 232 240);
+}
+
+:global([data-theme="dark"]) .input::placeholder {
+  color: rgb(100 116 139);
+}
+
+:global([data-theme="dark"]) .selectInput {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 20 20' fill='none'%3E%3Cpath d='M5.5 7.5L10 12l4.5-4.5' stroke='%2394a3b8' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}

@@ -17,6 +17,33 @@ import type { Job, JobTokenExportItem, Mailbox, MailboxUpdate, RuntimeLog, Setti
 import "./styles.css";
 import styles from "./App.module.css";
 
+type ThemePreference = "system" | "light" | "dark";
+
+const themeOptions: Array<{
+  value: ThemePreference;
+  label: string;
+  icon: string;
+  title: string;
+}> = [
+  { value: "system", label: "跟随系统", icon: "A", title: "切换到浅色模式" },
+  { value: "light", label: "浅色", icon: "L", title: "切换到深色模式" },
+  { value: "dark", label: "深色", icon: "D", title: "切换到跟随系统" },
+];
+
+function readThemePreference(): ThemePreference {
+  const saved = window.localStorage.getItem("theme-preference");
+  return saved === "light" || saved === "dark" || saved === "system"
+    ? saved
+    : "system";
+}
+
+function resolveTheme(preference: ThemePreference) {
+  if (preference !== "system") return preference;
+  return window.matchMedia("(prefers-color-scheme: dark)").matches
+    ? "dark"
+    : "light";
+}
+
 function App() {
   const location = useLocation();
   const [stats, setStats] = useState<Stats>(emptyStats);
@@ -40,12 +67,29 @@ function App() {
   const [credentialsOpen, setCredentialsOpen] = useState(false);
   const [tokenExportConfirm, setTokenExportConfirm] =
     useState<TokenExportConfirm>(null);
+  const [themePreference, setThemePreference] =
+    useState<ThemePreference>(readThemePreference);
+  const [resolvedTheme, setResolvedTheme] = useState<"light" | "dark">(() =>
+    resolveTheme(readThemePreference()),
+  );
+
+  const themeOption =
+    themeOptions.find((option) => option.value === themePreference) ||
+    themeOptions[0];
 
   function showToast(
     message: string,
     type: "success" | "error" | "info" = "info",
   ) {
     setToast({ message, type });
+  }
+
+  function toggleThemePreference() {
+    const currentIndex = themeOptions.findIndex(
+      (option) => option.value === themePreference,
+    );
+    const next = themeOptions[(currentIndex + 1) % themeOptions.length].value;
+    setThemePreference(next);
   }
 
   useEffect(() => {
@@ -114,6 +158,22 @@ function App() {
   useEffect(() => {
     refresh().catch(console.error);
   }, []);
+
+  useEffect(() => {
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+
+    function applyTheme() {
+      const nextTheme = resolveTheme(themePreference);
+      document.documentElement.dataset.theme = nextTheme;
+      document.documentElement.style.colorScheme = nextTheme;
+      setResolvedTheme(nextTheme);
+    }
+
+    window.localStorage.setItem("theme-preference", themePreference);
+    applyTheme();
+    media.addEventListener("change", applyTheme);
+    return () => media.removeEventListener("change", applyTheme);
+  }, [themePreference]);
 
   useEffect(() => {
     const title = routeTitles[location.pathname] || "总览";
@@ -400,7 +460,7 @@ function App() {
   const loginingCount = stats.mailboxes.logining || 0;
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,#dbeafe_0,#f8fafc_34%,#eef2ff_100%)] text-slate-950">
+    <div className="theme-shell min-h-screen text-slate-950">
       <div className="mx-auto max-w-[92rem] px-4 py-4 sm:px-5">
         <header className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <NavLink
@@ -549,6 +609,18 @@ function App() {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </div>
+      <button
+        type="button"
+        className="fixed bottom-4 right-4 z-40 flex items-center gap-2 rounded-full border border-slate-200/70 bg-white/90 px-3 py-2 text-sm font-bold text-slate-700 shadow-soft backdrop-blur transition hover:text-slate-950 sm:bottom-5 sm:right-5"
+        onClick={toggleThemePreference}
+        aria-label={`当前${themeOption.label}，${themeOption.title}`}
+        title={`${themeOption.label} · 当前为${resolvedTheme === "dark" ? "深色" : "浅色"}`}
+      >
+        <span className="grid h-6 w-6 place-items-center rounded-full bg-slate-950 text-xs font-black text-white">
+          {themeOption.icon}
+        </span>
+        <span>{themeOption.label}</span>
+      </button>
     </div>
   );
 }
