@@ -382,6 +382,9 @@ func legacyPasswordForSettings(settings domain.Settings) string {
 }
 
 func pickProxy(settings domain.Settings) string {
+	if settings.ProxyMode == "local" {
+		return ""
+	}
 	if len(settings.Proxies) == 0 {
 		return ""
 	}

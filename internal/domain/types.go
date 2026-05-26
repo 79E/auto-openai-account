@@ -121,7 +121,7 @@ func NormalizeSettings(s Settings) Settings {
 	if s.Proxies == nil {
 		s.Proxies = []string{}
 	}
-	if s.ProxyMode != "single" && s.ProxyMode != "round_robin" {
+	if s.ProxyMode != "local" && s.ProxyMode != "single" && s.ProxyMode != "round_robin" {
 		s.ProxyMode = "random"
 	}
 	if s.PasswordMode != "fixed" {

@@ -358,7 +358,7 @@ func (w *worker) loginAndExchangeTokens(ctx context.Context, email, password str
 		if accessToken == "" || refreshToken == "" || idToken == "" {
 			return nil, fmt.Errorf("token exchange response missing access_token, refresh_token, or id_token")
 		}
-		return map[string]any{"access_token": accessToken, "refresh_token": refreshToken, "id_token": idToken}, nil
+		return tokenPayload, nil
 	}
 	logStep(email, "登录换 token: 提交邮箱 device_id=%s", w.deviceID)
 	status, payload, err := w.submitLoginEmail(ctx, email)
@@ -391,7 +391,7 @@ func (w *worker) loginAndExchangeTokens(ctx context.Context, email, password str
 			if accessToken == "" || refreshToken == "" || idToken == "" {
 				return nil, fmt.Errorf("token exchange response missing access_token, refresh_token, or id_token")
 			}
-			return map[string]any{"access_token": accessToken, "refresh_token": refreshToken, "id_token": idToken}, nil
+			return tokenPayload, nil
 		}
 		logStep(email, "登录换 token: 直接授权无 code，重新提交邮箱")
 		status, payload, err = w.submitLoginEmail(ctx, email)
@@ -509,7 +509,7 @@ func (w *worker) exchangeTokensFromContinueURL(ctx context.Context, continueURL,
 	if accessToken == "" || refreshToken == "" || idToken == "" {
 		return nil, fmt.Errorf("token exchange response missing access_token, refresh_token, or id_token")
 	}
-	return map[string]any{"access_token": accessToken, "refresh_token": refreshToken, "id_token": idToken}, nil
+	return tokenPayload, nil
 }
 
 func (w *worker) waitRegisterCode(ctx context.Context) (string, error) {

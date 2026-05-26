@@ -194,7 +194,7 @@ function App() {
     setSettingsDraft(normalizedSettings);
     const latest = jobData.items?.[0] || null;
     const latestSnapshot = latest ? await loadLatestJob(latest.id) : null;
-    const targetId = preferredJobId || activeJob?.id || latest?.id;
+    const targetId = preferredJobId || activeJob?.id;
     const selected = targetId
       ? jobData.items?.find((job) => job.id === targetId)
       : null;
@@ -218,6 +218,11 @@ function App() {
   useEffect(() => {
     refresh().catch(console.error);
   }, []);
+
+  useEffect(() => {
+    if (page !== "jobs" || activeJob || jobs.length === 0) return;
+    loadJob(jobs[0].id).catch(console.error);
+  }, [page, activeJob, jobs]);
 
   useEffect(() => {
     if (!activeJob?.id || activeJob.status !== "running") return;
@@ -288,7 +293,6 @@ function App() {
         body: JSON.stringify({ count }),
       });
       setActiveJob(job);
-      setPage("jobs");
       setTaskOpen(false);
       showToast(`注册任务 #${job.id} 已启动`, "success");
       await refresh(job.id);
@@ -312,7 +316,6 @@ function App() {
         body: JSON.stringify({ mailbox_ids: ids }),
       });
       setActiveJob(job);
-      setPage("jobs");
       setTaskOpen(false);
       showToast(`登录任务 #${job.id} 已启动`, "success");
       await refresh(job.id);
@@ -626,7 +629,7 @@ function Overview({
       : 0;
   return (
     <div className="flex min-h-0 flex-col lg:h-[calc(100vh-5.75rem)]">
-      <section className="mb-4 shrink-0 grid gap-4 lg:grid-cols-[1fr_1.25fr]">
+      <section className="mb-4 shrink-0 grid gap-4 lg:grid-cols-2">
         <div className="grid grid-cols-2 gap-2 rounded-2xl border border-slate-200/70 bg-white/80 p-3 shadow-soft backdrop-blur sm:grid-cols-3">
           <Stat label="代理池" value={stats.proxyCount} />
           <Stat label="未使用" value={stats.newCount} />
@@ -645,19 +648,19 @@ function Overview({
           </p>
           <div className="mt-4 flex flex-wrap justify-end gap-2">
             <button
+              onClick={refresh}
+              className="inline-flex items-center gap-2 rounded-xl border bg-white px-3 py-2 font-bold"
+            >
+              <RefreshCw size={16} />
+              刷新
+            </button>
+            <button
               onClick={openTask}
               disabled={busy}
               className="inline-flex items-center gap-2 rounded-xl bg-slate-950 px-3 py-2 font-bold text-white shadow-lg disabled:opacity-50"
             >
               <Play size={16} />
               创建任务
-            </button>
-            <button
-              onClick={refresh}
-              className="inline-flex items-center gap-2 rounded-xl border bg-white px-3 py-2 font-bold"
-            >
-              <RefreshCw size={16} />
-              刷新
             </button>
           </div>
         </div>
@@ -773,6 +776,7 @@ function CreateTaskModal({
                 setDraft({ ...draft, proxy_mode: e.target.value })
               }
             >
+              <option value="local">本地网络（不使用代理）</option>
               <option value="random">随机</option>
               <option value="single">固定第一条</option>
               <option value="round_robin">轮询</option>
@@ -886,6 +890,7 @@ function MailboxesPage({
   const [selected, setSelected] = useState<number[]>([]);
   const [importOpen, setImportOpen] = useState(false);
   const [view, setView] = useState<MailboxView>("all");
+  const [page, setPage] = useState(1);
   const counts = mailboxes.reduce<Record<string, number>>((a, m) => {
     a[m.status] = (a[m.status] || 0) + 1;
     return a;
@@ -904,13 +909,27 @@ function MailboxesPage({
     if (view === "used") return m.status !== "new";
     return m.status === view;
   });
-  const allSelected = visible.length > 0 && selected.length === visible.length;
+  const pageSize = 50;
+  const totalPages = Math.max(1, Math.ceil(visible.length / pageSize));
+  const currentPage = Math.min(page, totalPages);
+  const pageItems = visible.slice(
+    (currentPage - 1) * pageSize,
+    currentPage * pageSize,
+  );
+  const allSelected =
+    pageItems.length > 0 && pageItems.every((m) => selected.includes(m.id));
   const toggleOne = (id: number) =>
     setSelected((p) =>
       p.includes(id) ? p.filter((x) => x !== id) : [...p, id],
     );
-  const toggleAll = () =>
-    setSelected(allSelected ? [] : visible.map((m) => m.id));
+  const toggleAll = () => {
+    const pageIds = pageItems.map((m) => m.id);
+    setSelected((prev) =>
+      allSelected
+        ? prev.filter((id) => !pageIds.includes(id))
+        : Array.from(new Set([...prev, ...pageIds])),
+    );
+  };
   async function submitImport() {
     await importMailboxes();
     setImportOpen(false);
@@ -983,6 +1002,7 @@ function MailboxesPage({
               key={tab.key}
               onClick={() => {
                 setView(tab.key);
+                setPage(1);
                 setSelected([]);
               }}
               className={
@@ -997,7 +1017,7 @@ function MailboxesPage({
           ))}
         </div>
         <DataTable headers={["", "邮箱", "状态", "任务", "结果", "操作"]}>
-          {visible.map((m) => (
+          {pageItems.map((m) => (
             <tr key={m.id}>
               <td>
                 <input
@@ -1058,13 +1078,68 @@ function MailboxesPage({
             </tr>
           ))}
         </DataTable>
+        {visible.length === 0 && (
+          <div className="mt-3">
+            <EmptyState
+              title="暂无邮箱"
+              description={
+                mailboxes.length === 0
+                  ? "点击上方“批量导入”添加邮箱后，可在这里查看和管理。"
+                  : "当前筛选条件下没有邮箱，切换分类后再查看。"
+              }
+            />
+          </div>
+        )}
         <div className="mt-3 flex items-center gap-3 text-sm text-slate-500">
           <label className="inline-flex items-center gap-2">
             <input type="checkbox" checked={allSelected} onChange={toggleAll} />
-            全选当前列表
+            全选当前页
           </label>
-          <span>已选择 {selected.length} 个邮箱</span>
+          <span>
+            已选择 {selected.length} 个邮箱，当前显示 {pageItems.length} / {visible.length} 个
+          </span>
         </div>
+        {visible.length > pageSize && (
+          <div className="mt-3 flex flex-col gap-2 rounded-xl border bg-slate-50 p-3 text-sm text-slate-600 sm:flex-row sm:items-center sm:justify-between">
+            <span>
+              第 {currentPage} / {totalPages} 页，每页 {pageSize} 条
+            </span>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setPage(1)}
+                disabled={currentPage === 1}
+                className="rounded-xl border bg-white px-3 py-2 font-bold disabled:opacity-50"
+              >
+                首页
+              </button>
+              <button
+                type="button"
+                onClick={() => setPage(currentPage - 1)}
+                disabled={currentPage === 1}
+                className="rounded-xl border bg-white px-3 py-2 font-bold disabled:opacity-50"
+              >
+                上一页
+              </button>
+              <button
+                type="button"
+                onClick={() => setPage(currentPage + 1)}
+                disabled={currentPage === totalPages}
+                className="rounded-xl border bg-white px-3 py-2 font-bold disabled:opacity-50"
+              >
+                下一页
+              </button>
+              <button
+                type="button"
+                onClick={() => setPage(totalPages)}
+                disabled={currentPage === totalPages}
+                className="rounded-xl border bg-white px-3 py-2 font-bold disabled:opacity-50"
+              >
+                末页
+              </button>
+            </div>
+          </div>
+        )}
       </Card>
       {importOpen && (
         <Modal title="批量导入邮箱" onClose={() => setImportOpen(false)}>
@@ -1134,9 +1209,10 @@ function JobsPage({
         </div>
         <div className="min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">
           {jobs.length === 0 && (
-            <div className="rounded-xl border bg-slate-50 p-3 text-sm text-slate-500">
-              暂无任务。
-            </div>
+            <EmptyState
+              title="暂无任务"
+              description="点击右上角“创建任务”开始注册或登录换 token。"
+            />
           )}
           {jobs.map((j) => (
             <div
@@ -1278,22 +1354,27 @@ function ProxyPoolPage({
   }
   return (
     <>
-      <Card title="代理池" icon={<PlugZap size={18} />}>
-        <div className="mb-3 flex justify-end gap-2">
-          <button
-            onClick={() => setAddOpen(true)}
-            className="rounded-xl border bg-white px-3 py-2 text-sm font-bold"
-          >
-            新增代理
-          </button>
-          <button
-            onClick={testAll}
-            disabled={testing === "__all__"}
-            className="rounded-xl border bg-white px-3 py-2 text-sm font-bold disabled:opacity-50"
-          >
-            测试全部
-          </button>
-        </div>
+      <Card
+        title="代理池"
+        icon={<PlugZap size={18} />}
+        actions={
+          <div className="flex gap-2">
+            <button
+              onClick={() => setAddOpen(true)}
+              className="rounded-xl border bg-white px-3 py-2 text-sm font-bold"
+            >
+              新增代理
+            </button>
+            <button
+              onClick={testAll}
+              disabled={testing === "__all__"}
+              className="rounded-xl border bg-white px-3 py-2 text-sm font-bold disabled:opacity-50"
+            >
+              测试全部
+            </button>
+          </div>
+        }
+      >
         <div className="space-y-2">
           {settingsDraft.proxies.map((proxy, i) => {
             const r = results[proxy];
@@ -1335,6 +1416,12 @@ function ProxyPoolPage({
               </div>
             );
           })}
+          {!settingsDraft.proxies.length && (
+            <EmptyState
+              title="暂无代理"
+              description="点击右上角“新增代理”添加代理后，可在这里测速和管理。"
+            />
+          )}
         </div>
       </Card>
       {addOpen && (
@@ -1469,10 +1556,14 @@ function JobSummary({
           <MiniStat label="进度" value={progress} />
         </div>
         <div className="mt-4 min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">
+          {!activeJob && (
+            <EmptyState
+              title="暂无当前任务"
+              description="创建任务后，邮箱执行进度会显示在这里。"
+            />
+          )}
           {activeJob && taskItems.length === 0 && (
-            <div className="rounded-xl border bg-slate-50 p-3 text-sm text-slate-500">
-              本任务暂无邮箱明细。
-            </div>
+            <EmptyState title="暂无邮箱明细" description="本任务还没有邮箱执行记录。" />
           )}
           {taskItems.map((item) => {
             const canOpen = Boolean(item.mailbox);
@@ -1521,7 +1612,12 @@ function JobDetail({
 }) {
   return (
     <Card title={job ? `任务详情 #${job.id}` : "任务详情"} className="min-h-0">
-      {!job && <p className="text-slate-500">暂无任务。</p>}
+      {!job && (
+        <EmptyState
+          title="暂无任务详情"
+          description="从左侧任务列表选择任务后，可查看邮箱明细。"
+        />
+      )}
       {job && (
         <div className="flex h-[360px] flex-col lg:h-full lg:min-h-0">
           <div className="mb-3 grid grid-cols-3 gap-2">
@@ -1531,9 +1627,7 @@ function JobDetail({
           </div>
           <div className="min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">
             {(job.items || []).length === 0 && (
-              <div className="rounded-xl border bg-slate-50 p-3 text-sm text-slate-500">
-                本任务暂无邮箱明细。
-              </div>
+              <EmptyState title="暂无邮箱明细" description="本任务还没有邮箱执行记录。" />
             )}
             {(job.items || []).map((item) => {
               const mailbox = mailboxes.find(
@@ -1605,9 +1699,11 @@ function LogPanel({
         }`}
       >
         {logs.length === 0 && (
-          <div className="px-2 py-1.5 text-slate-500">
-            暂无日志。
-          </div>
+          <EmptyState
+            title="暂无日志"
+            description="任务运行时，实时日志会显示在这里。"
+            compact
+          />
         )}
         {logs.map((log) => (
           <div
@@ -1821,14 +1917,38 @@ function InfoRow({ label, value }: { label: string; value: string }) {
     </div>
   );
 }
+function EmptyState({
+  title,
+  description,
+  compact = false,
+}: {
+  title: string;
+  description?: string;
+  compact?: boolean;
+}) {
+  return (
+    <div
+      className={`rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 text-center ${
+        compact ? "py-5" : "py-10"
+      }`}
+    >
+      <div className="text-sm font-bold text-slate-700">{title}</div>
+      {description && (
+        <div className="mt-1 text-sm text-slate-500">{description}</div>
+      )}
+    </div>
+  );
+}
 function Card({
   title,
   icon,
+  actions,
   className = "",
   children,
 }: {
   title: string;
   icon?: React.ReactNode;
+  actions?: React.ReactNode;
   className?: string;
   children: React.ReactNode;
 }) {
@@ -1836,9 +1956,12 @@ function Card({
     <div
       className={`flex flex-col rounded-2xl border border-slate-200/70 bg-white/80 p-4 shadow-soft backdrop-blur ${className}`}
     >
-      <div className="mb-3 flex items-center gap-2 text-base font-extrabold">
-        {icon}
-        {title}
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2 text-base font-extrabold">
+          {icon}
+          {title}
+        </div>
+        {actions}
       </div>
       <div className="min-h-0 flex-1">{children}</div>
     </div>
