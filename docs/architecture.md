@@ -24,16 +24,17 @@ internal/
   domain/       Shared business types
   runner/       Job execution and cancellation
   storage/      SQLite persistence
+  proxypool/    Proxy testing
   webui/        Embedded UI filesystem
-docs/           Requirements, mapping, design notes
+docs/           Requirements, API, architecture, and design notes
 ```
 
 ## Module Boundaries
 
-The first version uses internal plugin-style boundaries instead of runtime plugin installation.
+The first version uses internal provider-style boundaries instead of runtime plugin installation.
 
 ```text
-Provider interfaces are stable.
+Provider boundaries should stay isolated from API, UI, and storage code.
 Default implementations are compiled into the binary.
 Future providers can be added without rewriting API/UI/storage.
 ```
@@ -63,7 +64,7 @@ This avoids a blank waiting screen while a mailbox is registering.
 React is built into:
 
 ```text
-apps/web/dist
+dist
 ```
 
-The Go server embeds and serves that directory. During early development, a placeholder `dist/index.html` is included so the Go server can compile before the first frontend build.
+The Go server serves that directory from the project root.

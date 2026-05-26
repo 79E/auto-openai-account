@@ -12,7 +12,7 @@ export default defineConfig({
     },
   },
   build: {
-    outDir: "../../internal/webui/dist",
+    outDir: "../../dist",
     emptyOutDir: true,
   },
 });

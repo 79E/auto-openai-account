@@ -1,20 +1,11 @@
 package webui
 
 import (
-	"embed"
-	"io/fs"
 	"net/http"
 )
 
-//go:embed dist/*
-var files embed.FS
-
 func Handler() http.Handler {
-	dist, err := fs.Sub(files, "dist")
-	if err != nil {
-		return http.NotFoundHandler()
-	}
-	return spaHandler{fs: http.FS(dist)}
+	return spaHandler{fs: http.Dir("dist")}
 }
 
 type spaHandler struct{ fs http.FileSystem }

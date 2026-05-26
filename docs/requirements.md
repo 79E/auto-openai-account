@@ -2,9 +2,9 @@
 
 ## Product Goal
 
-`auto-openai-account` is a standard open-source, modular account automation console. The backend stays in Go, the UI uses React, shadcn/ui-style components, and Tailwind CSS. A production build should start with one Go service and serve both API and UI.
+`auto-openai-account` is a standard open-source, modular account automation console. The backend stays in Go, the UI uses React, shadcn-style components, and Tailwind CSS. A production build should start with one Go service and serve both API and UI.
 
-The business behavior should stay aligned with the existing desktop `goGPTRegisterAccount` project while allowing module extraction, small bug fixes, and clearer interfaces.
+The project is a complete standalone product. Product behavior, API contracts, and UI decisions should be documented inside this repository.
 
 ## First Version Scope
 
@@ -28,7 +28,7 @@ The business behavior should stay aligned with the existing desktop `goGPTRegist
 
 ## UI Requirements
 
-The chosen style is `02-modern-saas.html`: Modern SaaS Console.
+The product UI should follow `docs/design.md`.
 
 - Light theme first.
 - Blue/purple gradient accents.
@@ -86,4 +86,7 @@ The UI must be able to display:
 - `POST /api/register-jobs/{id}/stop`
 - `GET /api/register-jobs/{id}/logs`
 - `GET /api/register-jobs/{id}/events`
+- `GET /api/register-jobs/{id}/tokens`
+- `POST /api/login-jobs`
+- `POST /api/proxy/test`
 - `GET /api/stats`
