@@ -402,7 +402,7 @@ function App() {
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,#dbeafe_0,#f8fafc_34%,#eef2ff_100%)] text-slate-950">
       <div className="mx-auto max-w-[92rem] px-4 py-4 sm:px-5">
-        <header className="mb-4 flex items-center justify-between gap-3">
+        <header className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <NavLink
             to="/"
             className="flex items-center gap-2 font-extrabold"
@@ -416,7 +416,7 @@ function App() {
             />
             {appName}
           </NavLink>
-          <nav className="hidden rounded-xl border border-slate-200/70 bg-white/70 p-1 shadow-sm backdrop-blur lg:flex">
+          <nav className="flex w-full gap-1 overflow-x-auto rounded-xl border border-slate-200/70 bg-white/70 p-1 shadow-sm backdrop-blur sm:w-auto">
             {nav.map((item) => (
               <NavLink
                 key={item.path}
@@ -424,8 +424,8 @@ function App() {
                 end={item.end}
                 className={({ isActive }) =>
                   isActive
-                    ? "rounded-lg bg-white px-3 py-1.5 font-semibold shadow-sm"
-                    : "px-3 py-1.5 text-slate-500 transition hover:text-slate-950"
+                    ? "shrink-0 rounded-lg bg-white px-3 py-1.5 font-semibold shadow-sm"
+                    : "shrink-0 px-3 py-1.5 text-slate-500 transition hover:text-slate-950"
                 }
               >
                 {item.label}
@@ -558,4 +558,3 @@ createRoot(document.getElementById("root")!).render(
     <App />
   </BrowserRouter>,
 );
-

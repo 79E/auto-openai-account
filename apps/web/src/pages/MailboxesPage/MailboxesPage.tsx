@@ -160,7 +160,7 @@ export function MailboxesPage({
             </button>
           ))}
         </div>
-        <DataTable headers={["", "邮箱", "状态", "任务", "结果", "操作"]}>
+        <DataTable headers={["", "邮箱", "状态", "任务", "结果", "操作"]} minWidth="52rem">
           {pageItems.map((m) => (
             <tr key={m.id}>
               <td>

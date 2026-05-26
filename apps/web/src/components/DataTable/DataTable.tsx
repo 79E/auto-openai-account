@@ -4,13 +4,15 @@ import styles from "./DataTable.module.css";
 export function DataTable({
   headers,
   children,
+  minWidth = "44rem",
 }: {
   headers: string[];
   children: ReactNode;
+  minWidth?: string;
 }) {
   return (
     <div className="overflow-auto rounded-xl border">
-      <table className="w-full border-collapse bg-white text-sm">
+      <table className="w-full border-collapse bg-white text-sm" style={{ minWidth }}>
         <thead>
           <tr>
             {headers.map((h) => (
