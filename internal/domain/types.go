@@ -90,6 +90,8 @@ type RegisterJobItem struct {
 	UpdatedAt  string `json:"updated_at"`
 }
 
+type JobTokenExportItem map[string]any
+
 type RuntimeLog struct {
 	ID        int64  `json:"id"`
 	JobID     int64  `json:"job_id"`

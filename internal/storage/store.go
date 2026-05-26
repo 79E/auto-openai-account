@@ -383,6 +383,30 @@ func (s *Store) ListJobItems(jobID int64) ([]domain.RegisterJobItem, error) {
 	}
 	return items, rows.Err()
 }
+
+func (s *Store) ListJobTokenExports(jobID int64) ([]domain.JobTokenExportItem, error) {
+	rows, err := s.db.Query(`SELECT m.email, m.token_json FROM register_job_items ji JOIN mailboxes m ON m.id = ji.mailbox_id WHERE ji.job_id=? AND ji.status='success' AND TRIM(COALESCE(m.token_json, '')) <> '' ORDER BY ji.id ASC`, jobID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []domain.JobTokenExportItem{}
+	for rows.Next() {
+		var email, tokenJSON string
+		if err := rows.Scan(&email, &tokenJSON); err != nil {
+			return nil, err
+		}
+		var token domain.JobTokenExportItem
+		if err := json.Unmarshal([]byte(tokenJSON), &token); err != nil {
+			token = domain.JobTokenExportItem{"email": email, "token": tokenJSON}
+		} else if _, ok := token["email"]; !ok {
+			token["email"] = email
+		}
+		items = append(items, token)
+	}
+	return items, rows.Err()
+}
+
 func (s *Store) StartJobItem(jobID, mailboxID int64) error {
 	ts := now()
 	_, err := s.db.Exec(`UPDATE register_job_items SET status='running', started_at=?, updated_at=? WHERE job_id=? AND mailbox_id=?`, ts, ts, jobID, mailboxID)

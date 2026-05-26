@@ -318,6 +318,26 @@ func (s *Server) handleRegisterJobByID(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		writeJSON(w, 200, map[string]any{"items": logs})
+	case "tokens":
+		if r.Method != http.MethodGet {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		job, err := s.store.GetJob(id, false)
+		if err != nil {
+			writeError(w, 404, fmt.Errorf("register job not found"))
+			return
+		}
+		if job.Status != domain.JobStatusFinished && job.Status != domain.JobStatusStopped {
+			writeError(w, 400, fmt.Errorf("only finished or stopped jobs can export tokens"))
+			return
+		}
+		items, err := s.store.ListJobTokenExports(id)
+		if err != nil {
+			writeError(w, 500, err)
+			return
+		}
+		writeJSON(w, 200, map[string]any{"count": len(items), "items": items})
 	case "events":
 		s.handleJobEvents(w, r, id)
 	case "":

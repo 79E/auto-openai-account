@@ -1,6 +1,14 @@
 import React, { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
+  BrowserRouter,
+  Navigate,
+  NavLink,
+  Route,
+  Routes,
+  useLocation,
+} from "react-router-dom";
+import {
   Activity,
   Database,
   Play,
@@ -10,7 +18,6 @@ import {
 } from "lucide-react";
 import "./styles.css";
 
-type Page = "overview" | "mailboxes" | "jobs" | "proxies" | "plugins";
 type MailboxView = "all" | "unused" | "used" | "registered" | "abnormal";
 type Stats = {
   mailboxes: Record<string, number>;
@@ -58,6 +65,9 @@ type JobItem = {
   error?: string;
   duration_ms: number;
 };
+type JobTokenExportItem = {
+  [key: string]: unknown;
+};
 type RuntimeLog = {
   id: number;
   email: string;
@@ -92,16 +102,28 @@ type ToastState = {
   message: string;
   type: "success" | "error" | "info";
 } | null;
+type TokenExportConfirm = {
+  jobId: number;
+  count: number;
+  items: JobTokenExportItem[];
+} | null;
 
 const emptyStats: Stats = { mailboxes: {}, jobs: {} };
 const defaultPassword = "Mima1234567890.";
-const nav: Array<{ key: Page; label: string }> = [
-  { key: "overview", label: "总览" },
-  { key: "mailboxes", label: "邮箱池" },
-  { key: "jobs", label: "任务" },
-  { key: "proxies", label: "代理池" },
-  { key: "plugins", label: "插件" },
+const nav: Array<{ path: string; label: string; end?: boolean }> = [
+  { path: "/", label: "总览", end: true },
+  { path: "/mailboxes", label: "邮箱池" },
+  { path: "/jobs", label: "任务" },
+  { path: "/proxies", label: "代理池" },
+  { path: "/plugins", label: "插件" },
 ];
+const routeTitles: Record<string, string> = {
+  "/": "总览",
+  "/mailboxes": "邮箱池",
+  "/jobs": "任务",
+  "/proxies": "代理池",
+  "/plugins": "插件",
+};
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, {
@@ -124,7 +146,7 @@ function normalizeSettingsPayload(settings: SettingsPayload): SettingsPayload {
 }
 
 function App() {
-  const [page, setPage] = useState<Page>("overview");
+  const location = useLocation();
   const [stats, setStats] = useState<Stats>(emptyStats);
   const [mailboxes, setMailboxes] = useState<Mailbox[]>([]);
   const [jobs, setJobs] = useState<Job[]>([]);
@@ -144,6 +166,8 @@ function App() {
   const [mailboxDetailDraft, setMailboxDetailDraft] =
     useState<MailboxUpdate | null>(null);
   const [credentialsOpen, setCredentialsOpen] = useState(false);
+  const [tokenExportConfirm, setTokenExportConfirm] =
+    useState<TokenExportConfirm>(null);
 
   function showToast(
     message: string,
@@ -220,9 +244,14 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (page !== "jobs" || activeJob || jobs.length === 0) return;
+    const title = routeTitles[location.pathname] || "总览";
+    document.title = `${title} - Auto OpenAI Account`;
+  }, [location.pathname]);
+
+  useEffect(() => {
+    if (location.pathname !== "/jobs" || activeJob || jobs.length === 0) return;
     loadJob(jobs[0].id).catch(console.error);
-  }, [page, activeJob, jobs]);
+  }, [location.pathname, activeJob, jobs]);
 
   useEffect(() => {
     if (!activeJob?.id || activeJob.status !== "running") return;
@@ -465,6 +494,33 @@ function App() {
     }
   }
 
+  async function exportJobTokens(job: Job) {
+    if (!canExportJobTokens(job)) return;
+    setBusy(true);
+    try {
+      const result = await api<{ count: number; items: JobTokenExportItem[] }>(
+        `/api/register-jobs/${job.id}/tokens`,
+      );
+      setTokenExportConfirm({
+        jobId: job.id,
+        count: result.count,
+        items: result.items || [],
+      });
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "导出 token 失败", "error");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function confirmExportJobTokens() {
+    if (!tokenExportConfirm) return;
+    const filename = `${formatFileDate(new Date())}_task-${tokenExportConfirm.jobId}_${tokenExportConfirm.count}.json`;
+    downloadJsonFile(filename, tokenExportConfirm.items);
+    showToast(`已导出 ${tokenExportConfirm.count} 条 token`, "success");
+    setTokenExportConfirm(null);
+  }
+
   const registered = stats.mailboxes.registered || 0;
   const abnormal = stats.mailboxes.abnormal || 0;
   const newCount = stats.mailboxes.new || 0;
@@ -475,26 +531,33 @@ function App() {
     <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,#dbeafe_0,#f8fafc_34%,#eef2ff_100%)] text-slate-950">
       <div className="mx-auto max-w-[92rem] px-4 py-4 sm:px-5">
         <header className="mb-4 flex items-center justify-between gap-3">
-          <button
-            onClick={() => setPage("overview")}
+          <NavLink
+            to="/"
             className="flex items-center gap-2 font-extrabold"
           >
-            <div className="h-8 w-8 rounded-xl bg-gradient-to-br from-blue-600 to-violet-600 shadow-soft" />
+            <img
+              src="/logo.svg"
+              alt=""
+              aria-hidden="true"
+              draggable={false}
+              className="h-8 w-8"
+            />
             Auto OpenAI Account
-          </button>
+          </NavLink>
           <nav className="hidden rounded-xl border border-slate-200/70 bg-white/70 p-1 shadow-sm backdrop-blur lg:flex">
             {nav.map((item) => (
-              <button
-                key={item.key}
-                onClick={() => setPage(item.key)}
-                className={
-                  page === item.key
+              <NavLink
+                key={item.path}
+                to={item.path}
+                end={item.end}
+                className={({ isActive }) =>
+                  isActive
                     ? "rounded-lg bg-white px-3 py-1.5 font-semibold shadow-sm"
                     : "px-3 py-1.5 text-slate-500 transition hover:text-slate-950"
                 }
               >
                 {item.label}
-              </button>
+              </NavLink>
             ))}
           </nav>
         </header>
@@ -523,71 +586,96 @@ function App() {
             onSave={saveMailboxDetail}
           />
         )}
-        {page === "overview" && (
-          <Overview
-            stats={{
-              newCount,
-              runningCount,
-              loginingCount,
-              registered,
-              abnormal,
-              proxyCount: settings?.proxies?.length || 0,
-            }}
-            mailboxes={mailboxes}
-            logs={latestLogs}
-            activeJob={latestJob}
-            busy={busy}
-            openTask={() => setTaskOpen(true)}
-            openMailboxDetail={openMailboxDetail}
-            refresh={refresh}
+        {tokenExportConfirm && (
+          <TokenExportConfirmModal
+            exportInfo={tokenExportConfirm}
+            onClose={() => setTokenExportConfirm(null)}
+            onConfirm={confirmExportJobTokens}
           />
         )}
-        {page === "mailboxes" && (
-          <MailboxesPage
-            mailboxes={mailboxes}
-            importText={importText}
-            setImportText={setImportText}
-            importMailboxes={importMailboxes}
-            openMailboxDetail={openMailboxDetail}
-            deleteMailboxes={deleteMailboxes}
-            resetMailboxes={resetMailboxes}
-            startLoginJob={(ids) =>
-              settingsDraft && createLoginTask(settingsDraft, ids)
-            }
-            busy={busy}
-          />
-        )}
-        {page === "jobs" && (
-          <JobsPage
-            jobs={jobs}
-            activeJob={activeJob}
-            logs={logs}
-            mailboxes={mailboxes}
-            openTask={() => setTaskOpen(true)}
-            openMailboxDetail={openMailboxDetail}
-            stopTask={stopTask}
-            selectJob={loadJob}
-            busy={busy}
-          />
-        )}
-        {page === "proxies" && settingsDraft && (
-          <ProxyPoolPage
-            settingsDraft={settingsDraft}
-            setSettingsDraft={setSettingsDraft}
-            showToast={showToast}
-            saveSettings={(next) =>
-              saveSettings(next)
-                .then(() => showToast("代理池已更新", "success"))
-                .catch((e) =>
-                  showToast(
-                    e instanceof Error ? e.message : "保存失败",
-                    "error",
-                  ),
-                )
+        <Routes>
+          <Route
+            path="/"
+            element={
+              <Overview
+                stats={{
+                  newCount,
+                  runningCount,
+                  loginingCount,
+                  registered,
+                  abnormal,
+                  proxyCount: settings?.proxies?.length || 0,
+                }}
+                mailboxes={mailboxes}
+                logs={latestLogs}
+                activeJob={latestJob}
+                busy={busy}
+                openTask={() => setTaskOpen(true)}
+                openMailboxDetail={openMailboxDetail}
+                refresh={refresh}
+              />
             }
           />
-        )}
-        {page === "plugins" && <PluginsPage />}
+          <Route
+            path="/mailboxes"
+            element={
+              <MailboxesPage
+                mailboxes={mailboxes}
+                importText={importText}
+                setImportText={setImportText}
+                importMailboxes={importMailboxes}
+                openMailboxDetail={openMailboxDetail}
+                deleteMailboxes={deleteMailboxes}
+                resetMailboxes={resetMailboxes}
+                startLoginJob={(ids) =>
+                  settingsDraft && createLoginTask(settingsDraft, ids)
+                }
+                busy={busy}
+              />
+            }
+          />
+          <Route
+            path="/jobs"
+            element={
+              <JobsPage
+                jobs={jobs}
+                activeJob={activeJob}
+                logs={logs}
+                mailboxes={mailboxes}
+                openTask={() => setTaskOpen(true)}
+                openMailboxDetail={openMailboxDetail}
+                stopTask={stopTask}
+                exportJobTokens={exportJobTokens}
+                selectJob={loadJob}
+                busy={busy}
+              />
+            }
+          />
+          <Route
+            path="/proxies"
+            element={
+              settingsDraft ? (
+                <ProxyPoolPage
+                  settingsDraft={settingsDraft}
+                  setSettingsDraft={setSettingsDraft}
+                  showToast={showToast}
+                  saveSettings={(next) =>
+                    saveSettings(next)
+                      .then(() => showToast("代理池已更新", "success"))
+                      .catch((e) =>
+                        showToast(
+                          e instanceof Error ? e.message : "保存失败",
+                          "error",
+                        ),
+                      )
+                  }
+                />
+              ) : null
+            }
+          />
+          <Route path="/plugins" element={<PluginsPage />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
       </div>
     </div>
   );
@@ -641,7 +729,7 @@ function Overview({
         <div className="rounded-2xl border border-slate-200/70 bg-white/80 p-4 shadow-soft backdrop-blur">
           <p className="mb-1 text-xs font-bold uppercase tracking-wide text-slate-500">Modern SaaS Console</p>
           <h1 className="max-w-3xl text-2xl font-black tracking-[-0.04em]">
-            批量注册、代理池和实时日志在一个清爽控制台里。
+            批量注册、代理池和实时日志在一个控制台里全完成。
           </h1>
           <p className="mt-2 text-sm text-slate-500">
             从创建任务开始，选择注册或登录换 token，并配置并发、密码和代理策略。
@@ -1178,6 +1266,7 @@ function JobsPage({
   openTask,
   openMailboxDetail,
   stopTask,
+  exportJobTokens,
   selectJob,
   busy,
 }: {
@@ -1188,6 +1277,7 @@ function JobsPage({
   openTask: () => void;
   openMailboxDetail: (mailbox: Mailbox) => void;
   stopTask: (id: number) => void;
+  exportJobTokens: (job: Job) => void;
   selectJob: (id: number) => void;
   busy: boolean;
 }) {
@@ -1279,6 +1369,8 @@ function JobsPage({
           job={activeJob}
           mailboxes={mailboxes}
           openMailboxDetail={openMailboxDetail}
+          exportJobTokens={exportJobTokens}
+          busy={busy}
         />
         <LogPanel logs={logs} activeJob={activeJob} fillHeight />
       </div>
@@ -1298,7 +1390,7 @@ function ProxyPoolPage({
   saveSettings: (next: SettingsPayload) => void;
 }) {
   const [results, setResults] = useState<Record<string, ProxyTestResult>>({});
-  const [testing, setTesting] = useState("");
+  const [testing, setTesting] = useState<string[]>([]);
   const [addOpen, setAddOpen] = useState(false);
   const [addText, setAddText] = useState("");
   const persist = (proxies: string[]) => {
@@ -1327,7 +1419,7 @@ function ProxyPoolPage({
   }
   async function test(proxy: string) {
     if (!proxy.trim()) return;
-    setTesting(proxy);
+    setTesting((prev) => Array.from(new Set([...prev, proxy])));
     try {
       const d = await api<{ items: ProxyTestResult[] }>("/api/proxy/test", {
         method: "POST",
@@ -1335,23 +1427,38 @@ function ProxyPoolPage({
       });
       setResults((p) => ({ ...p, [proxy]: d.items[0] }));
     } finally {
-      setTesting("");
+      setTesting((prev) => prev.filter((item) => item !== proxy));
     }
   }
   async function testAll() {
     const ps = settingsDraft.proxies.filter(Boolean);
     if (!ps.length) return;
-    setTesting("__all__");
-    try {
-      const d = await api<{ items: ProxyTestResult[] }>("/api/proxy/test", {
-        method: "POST",
-        body: JSON.stringify({ proxies: ps }),
-      });
-      setResults(Object.fromEntries(d.items.map((x) => [x.proxy, x])));
-    } finally {
-      setTesting("");
-    }
+    setTesting((prev) => Array.from(new Set([...prev, ...ps])));
+    await Promise.all(
+      ps.map(async (proxy) => {
+        try {
+          const d = await api<{ items: ProxyTestResult[] }>("/api/proxy/test", {
+            method: "POST",
+            body: JSON.stringify({ proxy }),
+          });
+          setResults((prev) => ({ ...prev, [proxy]: d.items[0] }));
+        } catch (error) {
+          setResults((prev) => ({
+            ...prev,
+            [proxy]: {
+              proxy,
+              ok: false,
+              latency_ms: 0,
+              error: error instanceof Error ? error.message : "测试失败",
+            },
+          }));
+        } finally {
+          setTesting((prev) => prev.filter((item) => item !== proxy));
+        }
+      }),
+    );
   }
+  const hasTesting = testing.length > 0;
   return (
     <>
       <Card
@@ -1367,10 +1474,10 @@ function ProxyPoolPage({
             </button>
             <button
               onClick={testAll}
-              disabled={testing === "__all__"}
+              disabled={hasTesting}
               className="rounded-xl border bg-white px-3 py-2 text-sm font-bold disabled:opacity-50"
             >
-              测试全部
+              {hasTesting ? "测试中..." : "测试全部"}
             </button>
           </div>
         }
@@ -1378,6 +1485,7 @@ function ProxyPoolPage({
         <div className="space-y-2">
           {settingsDraft.proxies.map((proxy, i) => {
             const r = results[proxy];
+            const isTesting = testing.includes(proxy);
             return (
               <div key={i} className="rounded-xl border bg-slate-50 p-3">
                 <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
@@ -1386,10 +1494,10 @@ function ProxyPoolPage({
                   </div>
                   <button
                     onClick={() => test(proxy)}
-                    disabled={testing === proxy}
+                    disabled={isTesting}
                     className="rounded-xl bg-slate-950 px-3 py-2 text-sm font-bold text-white disabled:opacity-50"
                   >
-                    测速
+                    {isTesting ? "测试中..." : "测速"}
                   </button>
                   <button
                     onClick={() => remove(i)}
@@ -1605,13 +1713,38 @@ function JobDetail({
   job,
   mailboxes,
   openMailboxDetail,
+  exportJobTokens,
+  busy,
 }: {
   job: Job | null;
   mailboxes: Mailbox[];
   openMailboxDetail: (mailbox: Mailbox) => void;
+  exportJobTokens: (job: Job) => void;
+  busy: boolean;
 }) {
+  const canExport = Boolean(job && canExportJobTokens(job));
   return (
-    <Card title={job ? `任务详情 #${job.id}` : "任务详情"} className="min-h-0">
+    <Card
+      title={job ? `任务详情 #${job.id}` : "任务详情"}
+      className="min-h-0"
+      actions={
+        job ? (
+          <button
+            type="button"
+            onClick={() => exportJobTokens(job)}
+            disabled={busy || !canExport}
+            title={
+              canExport
+                ? "导出成功邮箱的 token"
+                : "只有已完成或已结束任务可以导出 token"
+            }
+            className="rounded-xl border bg-white px-3 py-2 text-sm font-bold disabled:opacity-50"
+          >
+            导出 Token
+          </button>
+        ) : null
+      }
+    >
       {!job && (
         <EmptyState
           title="暂无任务详情"
@@ -1822,6 +1955,51 @@ function MailboxDetailModal({
             className="rounded-xl bg-slate-950 px-3 py-2 font-bold text-white disabled:opacity-50"
           >
             保存
+          </button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function TokenExportConfirmModal({
+  exportInfo,
+  onClose,
+  onConfirm,
+}: {
+  exportInfo: NonNullable<TokenExportConfirm>;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <Modal
+      title="确认导出 Token"
+      subtitle={`任务 #${exportInfo.jobId}`}
+      onClose={onClose}
+    >
+      <div className="space-y-4 text-sm">
+        <div className="rounded-2xl border border-blue-100 bg-blue-50 p-4 text-slate-700">
+          <div className="text-base font-black text-slate-950">
+            可导出 {exportInfo.count} 条数据
+          </div>
+          <div className="mt-2 leading-6">
+            本次只会导出该任务中执行成功，并且已经生成 token 的邮箱数据。
+          </div>
+        </div>
+        <div className="flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-xl border bg-white px-3 py-2 font-bold"
+          >
+            取消
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            className="rounded-xl bg-slate-950 px-3 py-2 font-bold text-white"
+          >
+            确认导出
           </button>
         </div>
       </div>
@@ -2044,6 +2222,28 @@ function resultText(status?: string) {
       ? "失败"
       : status || "-";
 }
+function canExportJobTokens(job: Job) {
+  return ["finished", "stopped"].includes(job.status);
+}
+function formatFileDate(date: Date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}${m}${d}`;
+}
+function downloadJsonFile(filename: string, data: unknown) {
+  const blob = new Blob([JSON.stringify(data, null, 2)], {
+    type: "application/json;charset=utf-8",
+  });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
 function formatToken(token?: string) {
   if (!token) return "暂无 token";
   try {
@@ -2066,4 +2266,8 @@ function isValidProxyURL(value: string) {
     return false;
   }
 }
-createRoot(document.getElementById("root")!).render(<App />);
+createRoot(document.getElementById("root")!).render(
+  <BrowserRouter>
+    <App />
+  </BrowserRouter>,
+);
