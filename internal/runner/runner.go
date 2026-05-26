@@ -337,8 +337,109 @@ func (r *Runner) handleLegacyLog(email, message string) {
 	if step != "" {
 		_ = r.store.MarkMailboxStep(ctx.MailboxID, domain.MailboxStatusRegistering, step, stepIndex, stepTotal, ctx.Proxy)
 	}
-	r.log(domain.RuntimeLog{JobID: ctx.JobID, MailboxID: ctx.MailboxID, Email: ctx.Email, Level: "info", Step: step, StepIndex: stepIndex, StepTotal: stepTotal, Message: message})
+	r.log(domain.RuntimeLog{JobID: ctx.JobID, MailboxID: ctx.MailboxID, Email: ctx.Email, Level: "info", Step: step, StepIndex: stepIndex, StepTotal: stepTotal, Message: uiLogMessage(message)})
 
+}
+
+func uiLogMessage(message string) string {
+	message = strings.TrimSpace(message)
+	switch {
+	case strings.HasPrefix(message, "步骤 1/8"):
+		return "正在初始化注册会话"
+	case strings.HasPrefix(message, "步骤 2/8"):
+		return "正在提交注册密码"
+	case strings.HasPrefix(message, "步骤 3/8"):
+		return "正在请求发送邮箱验证码"
+	case strings.HasPrefix(message, "步骤 4/8"):
+		return "正在等待并读取邮箱验证码"
+	case strings.HasPrefix(message, "步骤 5/8"):
+		return "已读取验证码，正在提交校验"
+	case strings.HasPrefix(message, "步骤 6/8"):
+		return "验证码通过，正在创建账号资料"
+	case strings.HasPrefix(message, "步骤 7/8"):
+		return "账号已创建，正在登录并换取 token"
+	case strings.HasPrefix(message, "步骤 8/8"):
+		return "注册完成，token 已获取"
+	case strings.HasPrefix(message, "注册流程开始"):
+		return "注册流程开始"
+	case strings.HasPrefix(message, "注册流程完成"):
+		return "注册流程完成"
+	case strings.HasPrefix(message, "登录换 token 流程开始"):
+		return "登录换 token 流程开始"
+	case strings.Contains(message, "提交邮箱请求失败"):
+		return "提交邮箱失败，正在停止当前流程"
+	case strings.Contains(message, "提交邮箱") || strings.Contains(message, "重新提交邮箱"):
+		return "正在提交邮箱并确认登录方式"
+	case strings.Contains(message, "发送登录验证码失败"):
+		return "发送登录验证码失败，正在尝试密码校验"
+	case strings.Contains(message, "发送登录验证码"):
+		return "正在发送登录验证码"
+	case strings.Contains(message, "已获取登录验证码"):
+		return "已读取登录验证码，正在提交校验"
+	case strings.Contains(message, "登录验证码校验失败"):
+		return "登录验证码校验失败，正在尝试密码校验"
+	case strings.Contains(message, "登录验证码校验通过"):
+		return "登录验证码校验通过"
+	case strings.Contains(message, "构建 password_verify"):
+		return "正在准备密码校验"
+	case strings.Contains(message, "提交密码校验"):
+		return "正在提交密码校验"
+	case strings.Contains(message, "密码校验请求失败"):
+		return "密码校验请求失败"
+	case strings.Contains(message, "密码校验通过"):
+		return "密码校验通过，正在完成授权"
+	case strings.Contains(message, "密码校验返回"):
+		return "已收到密码校验结果"
+	case strings.Contains(message, "开始轮询邮箱验证码"):
+		return "正在连接邮箱读取验证码"
+	case strings.Contains(message, "邮箱验证码轮询第"):
+		return "正在检查邮箱验证码"
+	case strings.Contains(message, "邮箱验证码获取成功"):
+		return "已从邮箱读取验证码"
+	case strings.Contains(message, "邮箱验证码轮询失败"):
+		return "本次读取邮箱验证码失败，稍后重试"
+	case strings.Contains(message, "本次未找到验证码"):
+		return "暂未找到验证码，等待后继续检查"
+	case strings.Contains(message, "邮箱验证码超时"):
+		return "读取邮箱验证码超时"
+	case strings.Contains(message, "连接 IMAP"):
+		return "正在连接邮箱服务器"
+	case strings.Contains(message, "IMAP 登录认证"):
+		return "正在认证邮箱"
+	case strings.Contains(message, "IMAP 选择 INBOX") || strings.Contains(message, "IMAP 搜索全部邮件"):
+		return "正在搜索收件箱邮件"
+	case strings.Contains(message, "INBOX 没有邮件"):
+		return "收件箱暂无邮件"
+	case strings.Contains(message, "准备检查最近") || strings.Contains(message, "读取邮件"):
+		return "正在检查最近邮件"
+	case strings.Contains(message, "跳过："):
+		return "已跳过一封不匹配的邮件"
+	case strings.Contains(message, "可见正文未匹配到"):
+		return "邮件中暂未匹配到验证码"
+	case strings.Contains(message, "可见正文匹配到"):
+		return "邮件中已匹配到验证码"
+	case strings.Contains(message, "access token 刷新成功"):
+		return "邮箱访问 token 已刷新"
+	case strings.HasPrefix(message, "登录换 token 流程完成"):
+		return "登录换 token 流程完成"
+	default:
+		return stripLogDetails(message)
+	}
+}
+
+func stripLogDetails(message string) string {
+	if idx := strings.Index(message, ": "); idx >= 0 && idx+2 < len(message) {
+		prefix := message[:idx]
+		if strings.Contains(prefix, "登录换 token") {
+			message = message[idx+2:]
+		}
+	}
+	for _, marker := range []string{" status=", " err=", " code=", " endpoint=", " ids=", " id=", " device_id=", " page_type=", " continue_url=", " password_len=", " token=", " context=", " timeout=", " attempt=", " location="} {
+		if idx := strings.Index(message, marker); idx >= 0 {
+			return strings.TrimSpace(message[:idx])
+		}
+	}
+	return message
 }
 
 func (r *Runner) setActive(email string, ctx activeLogContext) {

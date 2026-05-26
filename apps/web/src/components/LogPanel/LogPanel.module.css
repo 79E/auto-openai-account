@@ -1,2 +1,5 @@
-.root {}
-
+.message {
+  max-width: min(100%, 56rem);
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}

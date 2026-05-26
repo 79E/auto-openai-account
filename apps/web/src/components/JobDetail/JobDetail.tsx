@@ -1,4 +1,4 @@
-import { canExportJobTokens, resultText } from "../../lib/format";
+import { canExportJobTokens, formatDurationSeconds, resultText } from "../../lib/format";
 import type { Job, Mailbox } from "../../types";
 import { Badge } from "../Badge/Badge";
 import { Card } from "../Card/Card";
@@ -82,7 +82,7 @@ export function JobDetail({
                       {item.email}
                     </div>
                     <div className="mt-1 text-sm text-slate-500">
-                      耗时 {item.duration_ms}ms
+                      耗时 {formatDurationSeconds(item.duration_ms)}
                     </div>
                   </div>
                   <div className="flex shrink-0 items-center gap-2">

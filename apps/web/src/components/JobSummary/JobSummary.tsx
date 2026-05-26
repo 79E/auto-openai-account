@@ -1,5 +1,10 @@
 import { Activity } from "lucide-react";
-import { jobStatusText, jobTypeText, resultText } from "../../lib/format";
+import {
+  formatDurationSeconds,
+  jobStatusText,
+  jobTypeText,
+  resultText,
+} from "../../lib/format";
 import type { Job, Mailbox } from "../../types";
 import { Badge } from "../Badge/Badge";
 import { Card } from "../Card/Card";
@@ -39,7 +44,7 @@ export function JobSummary({
         mailbox: mailboxes.find((mailbox) => mailbox.email === item.email),
         status: item.status,
         text: resultText(item.status),
-        detail: item.error || `${item.duration_ms}ms`,
+        detail: item.error || formatDurationSeconds(item.duration_ms),
       }));
 
   return (

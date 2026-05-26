@@ -2,25 +2,36 @@
 
 [English](README-EN.md)
 
-`auto-openai-account` 是一个本地优先的账号自动化控制台，后端使用 Go，前端使用 React。
+项目主要用于 OpenAi/ChatGpt 账号自动化注册、登录、刷新token等操作，包括邮箱管理、代理配置、注册/登录任务、运行日志和 token 导出。
 
-它的目标是用一个 Go 服务同时提供：
-
+它的主要服务提供：
 - `/api/*` 下的 JSON API 和 Server-Sent Events 实时事件
 - `/` 下的 React 单页应用
-
-这个项目主要用于本地自动化工作流，包括邮箱管理、代理配置、注册/登录任务、运行日志和 token 导出。
 
 ## 功能
 
 - 邮箱导入和管理
 - 系统设置管理
 - 代理池配置和连通性测试
-- 注册任务创建、停止、进度、详情和日志
-- 登录/token 刷新任务
+- OpenAi/ChatGpt 账号注册任务创建、停止、进度、详情和日志
+- 自动化登录 OpenAi/ChatGpt 账号刷新token。
 - 运行日志写入 SQLite，并通过 SSE 实时推送
 - 已完成任务的 token 导出
 - Go 服务直接提供 React UI
+
+## 截图展示
+
+### 主控制台
+
+![主控制台](docs/screenshots/promo-hero.png)
+
+### 任务管理
+
+![任务管理](docs/screenshots/promo-tasks.png)
+
+### 邮箱池管理
+
+![邮箱池管理](docs/screenshots/promo-mailboxes.png)
 
 ## 技术栈
 

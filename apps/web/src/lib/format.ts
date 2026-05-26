@@ -24,6 +24,10 @@ export function resultText(status?: string) {
       : status || "-";
 }
 
+export function formatDurationSeconds(durationMs: number) {
+  return `${(durationMs / 1000).toFixed(1)}秒`;
+}
+
 export function canExportJobTokens(job: Job) {
   return ["finished", "stopped"].includes(job.status);
 }
@@ -73,4 +77,3 @@ export function isValidProxyURL(value: string) {
     return false;
   }
 }
-

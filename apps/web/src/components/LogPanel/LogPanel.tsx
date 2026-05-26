@@ -42,7 +42,9 @@ export function LogPanel({
               </span>
               <b className="truncate text-blue-600">{log.email}</b>
             </div>
-            <div className="mt-0.5 min-w-0 break-words pl-0 leading-5 text-slate-800">
+            <div
+              className={`mt-0.5 min-w-0 break-words pl-0 leading-5 text-slate-800 ${styles.message}`}
+            >
               {log.message}
             </div>
           </div>
