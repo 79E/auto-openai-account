@@ -1,0 +1,8 @@
+.DS_Store
+data/
+*.db
+*.db-shm
+*.db-wal
+node_modules/
+apps/web/.vite/
+apps/web/dist/

@@ -1,0 +1,357 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Modern SaaS Preview</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        color: #0f172a;
+        font:
+          14px/1.5 Inter,
+          ui-sans-serif,
+          system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          sans-serif;
+        background: radial-gradient(
+          circle at top left,
+          #dbeafe 0,
+          #f8fafc 34%,
+          #eef2ff 100%
+        );
+      }
+      .wrap {
+        max-width: 1240px;
+        margin: 0 auto;
+        padding: 24px;
+      }
+      header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 22px;
+      }
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-weight: 800;
+        font-size: 18px;
+      }
+      .logo {
+        width: 34px;
+        height: 34px;
+        border-radius: 12px;
+        background: linear-gradient(135deg, #2563eb, #7c3aed);
+        box-shadow: 0 12px 28px rgba(37, 99, 235, 0.25);
+      }
+      .nav {
+        display: flex;
+        gap: 4px;
+        background: rgba(255, 255, 255, 0.7);
+        padding: 5px;
+        border: 1px solid rgba(148, 163, 184, 0.28);
+        border-radius: 16px;
+        backdrop-filter: blur(16px);
+      }
+      .nav a {
+        color: #475569;
+        text-decoration: none;
+        padding: 8px 12px;
+        border-radius: 12px;
+      }
+      .nav a.active {
+        color: #111827;
+        background: #fff;
+        box-shadow: 0 4px 18px rgba(15, 23, 42, 0.08);
+      }
+      .hero {
+        display: grid;
+        grid-template-columns: 1.1fr 0.9fr;
+        gap: 18px;
+        margin-bottom: 18px;
+      }
+      .panel {
+        background: rgba(255, 255, 255, 0.78);
+        border: 1px solid rgba(148, 163, 184, 0.25);
+        border-radius: 24px;
+        box-shadow: 0 24px 60px rgba(15, 23, 42, 0.08);
+        backdrop-filter: blur(18px);
+      }
+      .hero-main {
+        padding: 28px;
+      }
+      h1 {
+        margin: 0 0 10px;
+        font-size: 34px;
+        letter-spacing: -0.04em;
+      }
+      .muted {
+        color: #64748b;
+      }
+      .buttons {
+        display: flex;
+        gap: 10px;
+        margin-top: 22px;
+      }
+      button {
+        border: 0;
+        border-radius: 14px;
+        padding: 11px 15px;
+        font-weight: 700;
+        cursor: pointer;
+      }
+      .primary {
+        background: #111827;
+        color: #fff;
+        box-shadow: 0 12px 28px rgba(15, 23, 42, 0.22);
+      }
+      .secondary {
+        background: #fff;
+        color: #1e293b;
+        border: 1px solid #e2e8f0;
+      }
+      .stats {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 12px;
+        padding: 18px;
+      }
+      .stat {
+        background: #fff;
+        border: 1px solid #e2e8f0;
+        border-radius: 20px;
+        padding: 18px;
+      }
+      .stat span {
+        color: #64748b;
+        font-size: 12px;
+      }
+      .stat strong {
+        display: block;
+        margin-top: 6px;
+        font-size: 28px;
+        letter-spacing: -0.03em;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: 0.85fr 1.15fr;
+        gap: 18px;
+      }
+      .card {
+        padding: 20px;
+      }
+      .card h2 {
+        margin: 0 0 14px;
+        font-size: 17px;
+      }
+      .progress {
+        height: 12px;
+        background: #e2e8f0;
+        border-radius: 999px;
+        overflow: hidden;
+      }
+      .progress span {
+        display: block;
+        height: 100%;
+        width: 62%;
+        background: linear-gradient(90deg, #2563eb, #22c55e);
+      }
+      .active-mail {
+        display: grid;
+        gap: 10px;
+        margin-top: 18px;
+      }
+      .mail {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 12px;
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 16px;
+      }
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 9px;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 700;
+      }
+      .pill.run {
+        color: #92400e;
+        background: #fef3c7;
+      }
+      .pill.ok {
+        color: #166534;
+        background: #dcfce7;
+      }
+      .pill.bad {
+        color: #991b1b;
+        background: #fee2e2;
+      }
+      .log {
+        display: grid;
+        gap: 10px;
+      }
+      .line {
+        display: grid;
+        grid-template-columns: 72px 1fr;
+        gap: 12px;
+        padding: 12px;
+        background: #fff;
+        border: 1px solid #e2e8f0;
+        border-radius: 16px;
+      }
+      .time {
+        color: #94a3b8;
+        font-variant-numeric: tabular-nums;
+      }
+      .proxy-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 12px;
+        margin-top: 18px;
+      }
+      .proxy {
+        background: #fff;
+        border: 1px solid #e2e8f0;
+        border-radius: 18px;
+        padding: 14px;
+      }
+      @media (max-width: 900px) {
+        .hero,
+        .grid,
+        .proxy-grid {
+          grid-template-columns: 1fr;
+        }
+        .nav {
+          display: none;
+        }
+        h1 {
+          font-size: 27px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header>
+        <div class="brand">
+          <div class="logo"></div>
+          Auto OpenAI Account
+        </div>
+        <nav class="nav">
+          <a class="active">Overview</a><a>Mailboxes</a><a>Jobs</a
+          ><a>Settings</a><a>Plugins</a>
+        </nav>
+      </header>
+      <section class="hero">
+        <div class="panel hero-main">
+          <p class="muted">现代 SaaS 控制台风格</p>
+          <h1>批量注册、代理池和实时日志在一个清爽控制台里。</h1>
+          <p class="muted">适合开源项目展示，页面更精致，信息不会太压迫。</p>
+          <div class="buttons">
+            <button class="primary">启动注册任务</button
+            ><button class="secondary">导入邮箱</button
+            ><button class="secondary">测试代理池</button>
+          </div>
+        </div>
+        <div class="panel stats">
+          <div class="stat"><span>新导入</span><strong>128</strong></div>
+          <div class="stat"><span>已注册</span><strong>842</strong></div>
+          <div class="stat"><span>异常</span><strong>17</strong></div>
+          <div class="stat"><span>健康代理</span><strong>9/12</strong></div>
+        </div>
+      </section>
+      <section class="grid">
+        <div class="panel card">
+          <h2>当前任务 #1024</h2>
+          <p class="muted">43 / 100 完成，并发 6，代理策略 random</p>
+          <div class="progress"><span></span></div>
+          <div class="active-mail">
+            <div class="mail">
+              <div>
+                <strong>a***@outlook.com</strong><br /><span class="muted"
+                  >步骤 4/8 等待验证码</span
+                >
+              </div>
+              <span class="pill run">运行中</span>
+            </div>
+            <div class="mail">
+              <div>
+                <strong>b***@outlook.com</strong><br /><span class="muted"
+                  >步骤 7/8 登录换 token</span
+                >
+              </div>
+              <span class="pill run">运行中</span>
+            </div>
+            <div class="mail">
+              <div>
+                <strong>c***@outlook.com</strong><br /><span class="muted"
+                  >步骤 8/8 完成</span
+                >
+              </div>
+              <span class="pill ok">成功</span>
+            </div>
+          </div>
+        </div>
+        <div class="panel card">
+          <h2>实时任务日志</h2>
+          <div class="log">
+            <div class="line">
+              <span class="time">14:22:01</span
+              ><span>a***@outlook.com 开始 platform authorize</span>
+            </div>
+            <div class="line">
+              <span class="time">14:22:09</span
+              ><span>a***@outlook.com 已请求发送邮箱验证码</span>
+            </div>
+            <div class="line">
+              <span class="time">14:22:18</span
+              ><span>a***@outlook.com 正在轮询 INBOX 验证码</span>
+            </div>
+            <div class="line">
+              <span class="time">14:23:21</span
+              ><span>b***@outlook.com 登录并换取 token</span>
+            </div>
+            <div class="line">
+              <span class="time">14:23:58</span
+              ><span>d***@outlook.com 验证码获取超时，已标记异常</span>
+            </div>
+          </div>
+        </div>
+      </section>
+      <section class="panel card" style="margin-top: 18px">
+        <h2>代理池</h2>
+        <p class="muted">随机选择健康代理，每个邮箱执行时独立分配。</p>
+        <div class="proxy-grid">
+          <div class="proxy">
+            <strong>socks5-01</strong>
+            <p class="muted">180ms · 今日 42 次</p>
+            <span class="pill ok">健康</span>
+          </div>
+          <div class="proxy">
+            <strong>http-08</strong>
+            <p class="muted">232ms · 今日 31 次</p>
+            <span class="pill ok">健康</span>
+          </div>
+          <div class="proxy">
+            <strong>socks5-07</strong>
+            <p class="muted">连接失败 · 今日 19 次</p>
+            <span class="pill bad">异常</span>
+          </div>
+        </div>
+      </section>
+    </div>
+  </body>
+</html>

@@ -1,0 +1,394 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Engineering Admin Preview</title>
+    <style>
+      :root {
+        --bg: #f3f4f6;
+        --panel: #fff;
+        --line: #d8dee9;
+        --text: #111827;
+        --muted: #6b7280;
+        --blue: #1d4ed8;
+        --green: #15803d;
+        --red: #b91c1c;
+        --amber: #b45309;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font:
+          13px/1.45 Arial,
+          Helvetica,
+          sans-serif;
+      }
+      .shell {
+        display: grid;
+        grid-template-columns: 230px 1fr;
+        min-height: 100vh;
+      }
+      aside {
+        background: #111827;
+        color: #d1d5db;
+        padding: 16px 12px;
+      }
+      .brand {
+        color: #fff;
+        font-weight: 700;
+        font-size: 16px;
+        margin: 4px 8px 18px;
+      }
+      nav a {
+        display: block;
+        color: #d1d5db;
+        text-decoration: none;
+        padding: 9px 10px;
+        border-radius: 4px;
+        margin-bottom: 3px;
+      }
+      nav a.active,
+      nav a:hover {
+        background: #1f2937;
+        color: #fff;
+      }
+      main {
+        padding: 16px;
+      }
+      .topbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 14px;
+      }
+      .topbar h1 {
+        margin: 0;
+        font-size: 20px;
+      }
+      .actions button {
+        border: 1px solid #9ca3af;
+        background: #fff;
+        padding: 7px 10px;
+        border-radius: 4px;
+        margin-left: 6px;
+        cursor: pointer;
+      }
+      .actions .primary {
+        background: var(--blue);
+        color: #fff;
+        border-color: var(--blue);
+      }
+      .grid {
+        display: grid;
+        gap: 12px;
+      }
+      .stats {
+        grid-template-columns: repeat(5, 1fr);
+      }
+      .cols {
+        grid-template-columns: 1.2fr 0.8fr;
+        align-items: start;
+      }
+      .card {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        box-shadow: 0 1px 1px rgba(0, 0, 0, 0.03);
+      }
+      .card h2 {
+        margin: 0;
+        padding: 10px 12px;
+        font-size: 14px;
+        border-bottom: 1px solid var(--line);
+        background: #f9fafb;
+      }
+      .stat {
+        padding: 12px;
+      }
+      .stat .label {
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .stat .num {
+        font-size: 24px;
+        font-weight: 700;
+        margin-top: 4px;
+      }
+      .body {
+        padding: 12px;
+      }
+      .progress {
+        height: 9px;
+        background: #e5e7eb;
+        border-radius: 20px;
+        overflow: hidden;
+      }
+      .progress span {
+        display: block;
+        height: 100%;
+        width: 43%;
+        background: var(--blue);
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      th,
+      td {
+        padding: 8px 9px;
+        border-bottom: 1px solid var(--line);
+        text-align: left;
+        white-space: nowrap;
+      }
+      th {
+        background: #f9fafb;
+        color: #374151;
+        font-weight: 700;
+      }
+      .badge {
+        display: inline-block;
+        padding: 2px 7px;
+        border-radius: 99px;
+        font-size: 12px;
+        border: 1px solid;
+      }
+      .new {
+        color: var(--blue);
+        background: #eff6ff;
+        border-color: #bfdbfe;
+      }
+      .running {
+        color: var(--amber);
+        background: #fffbeb;
+        border-color: #fde68a;
+      }
+      .ok {
+        color: var(--green);
+        background: #f0fdf4;
+        border-color: #bbf7d0;
+      }
+      .bad {
+        color: var(--red);
+        background: #fef2f2;
+        border-color: #fecaca;
+      }
+      .log {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        background: #0f172a;
+        color: #d1d5db;
+        border-radius: 4px;
+        padding: 10px;
+        height: 220px;
+        overflow: hidden;
+      }
+      .log div {
+        margin-bottom: 6px;
+      }
+      .log .time {
+        color: #94a3b8;
+      }
+      .log .email {
+        color: #93c5fd;
+      }
+      .log .warn {
+        color: #fbbf24;
+      }
+      .small {
+        color: var(--muted);
+        font-size: 12px;
+      }
+      @media (max-width: 900px) {
+        .shell {
+          grid-template-columns: 1fr;
+        }
+        aside {
+          display: none;
+        }
+        .stats,
+        .cols {
+          grid-template-columns: 1fr;
+        }
+        table {
+          font-size: 12px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <aside>
+        <div class="brand">Auto OpenAI Account</div>
+        <nav>
+          <a class="active" href="#">Dashboard</a><a href="#">Mailboxes</a
+          ><a href="#">Import</a><a href="#">Register Jobs</a
+          ><a href="#">Settings</a><a href="#">Plugins</a><a href="#">Logs</a>
+        </nav>
+      </aside>
+      <main>
+        <div class="topbar">
+          <h1>工程后台风格</h1>
+          <div class="actions">
+            <button>测试代理池</button
+            ><button class="primary">启动注册任务</button>
+          </div>
+        </div>
+        <section class="grid stats">
+          <div class="card stat">
+            <div class="label">新导入</div>
+            <div class="num">128</div>
+          </div>
+          <div class="card stat">
+            <div class="label">注册中</div>
+            <div class="num">6</div>
+          </div>
+          <div class="card stat">
+            <div class="label">已注册</div>
+            <div class="num">842</div>
+          </div>
+          <div class="card stat">
+            <div class="label">异常</div>
+            <div class="num">17</div>
+          </div>
+          <div class="card stat">
+            <div class="label">健康代理</div>
+            <div class="num">9/12</div>
+          </div>
+        </section>
+        <section class="grid cols" style="margin-top: 12px">
+          <div class="card">
+            <h2>当前注册任务 #1024</h2>
+            <div class="body">
+              <div class="small">
+                43 / 100 已完成，成功率 86%，并发 6，代理策略 random
+              </div>
+              <br />
+              <div class="progress"><span></span></div>
+              <br />
+              <table>
+                <thead>
+                  <tr>
+                    <th>邮箱</th>
+                    <th>状态</th>
+                    <th>当前步骤</th>
+                    <th>代理</th>
+                    <th>耗时</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>a***@outlook.com</td>
+                    <td><span class="badge running">运行中</span></td>
+                    <td>4/8 等待验证码</td>
+                    <td>socks5-03</td>
+                    <td>01:42</td>
+                  </tr>
+                  <tr>
+                    <td>b***@outlook.com</td>
+                    <td><span class="badge running">运行中</span></td>
+                    <td>7/8 登录换 token</td>
+                    <td>http-08</td>
+                    <td>02:31</td>
+                  </tr>
+                  <tr>
+                    <td>c***@outlook.com</td>
+                    <td><span class="badge ok">成功</span></td>
+                    <td>8/8 完成</td>
+                    <td>socks5-01</td>
+                    <td>02:09</td>
+                  </tr>
+                  <tr>
+                    <td>d***@outlook.com</td>
+                    <td><span class="badge bad">失败</span></td>
+                    <td>验证码超时</td>
+                    <td>socks5-07</td>
+                    <td>03:00</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <div class="card">
+            <h2>实时日志</h2>
+            <div class="body">
+              <div class="log">
+                <div>
+                  <span class="time">14:22:01</span>
+                  <span class="email">a***@outlook.com</span> 步骤 1/8 platform
+                  authorize
+                </div>
+                <div>
+                  <span class="time">14:22:05</span>
+                  <span class="email">a***@outlook.com</span> 步骤 2/8
+                  提交注册密码
+                </div>
+                <div>
+                  <span class="time">14:22:09</span>
+                  <span class="email">a***@outlook.com</span> 步骤 3/8
+                  请求发送邮箱验证码
+                </div>
+                <div>
+                  <span class="time">14:22:18</span>
+                  <span class="email">a***@outlook.com</span> 步骤 4/8
+                  等待并读取邮箱验证码
+                </div>
+                <div>
+                  <span class="time">14:23:21</span>
+                  <span class="email">b***@outlook.com</span> 步骤 7/8
+                  登录并换取 token
+                </div>
+                <div>
+                  <span class="time">14:23:58</span>
+                  <span class="warn">WARN</span> d*** 验证码获取超时
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+        <section class="card" style="margin-top: 12px">
+          <h2>代理池</h2>
+          <div class="body">
+            <table>
+              <thead>
+                <tr>
+                  <th>名称</th>
+                  <th>地址</th>
+                  <th>状态</th>
+                  <th>延迟</th>
+                  <th>今日使用</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>socks5-01</td>
+                  <td>socks5://127.0.0.1:7890</td>
+                  <td><span class="badge ok">健康</span></td>
+                  <td>180ms</td>
+                  <td>42</td>
+                </tr>
+                <tr>
+                  <td>http-08</td>
+                  <td>http://10.0.0.8:8080</td>
+                  <td><span class="badge ok">健康</span></td>
+                  <td>232ms</td>
+                  <td>31</td>
+                </tr>
+                <tr>
+                  <td>socks5-07</td>
+                  <td>socks5://10.0.0.7:1080</td>
+                  <td><span class="badge bad">异常</span></td>
+                  <td>-</td>
+                  <td>19</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>
