@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Database, UploadCloud } from "lucide-react";
+import { Database, KeyRound, ShieldCheck, UploadCloud } from "lucide-react";
 import { jobTypeText, resultText } from "../../lib/format";
 import type { Mailbox, MailboxView } from "../../types";
 import { Badge } from "../../components/Badge/Badge";
@@ -19,6 +19,7 @@ export function MailboxesPage({
   deleteMailboxes,
   resetMailboxes,
   startLoginJob,
+  startCodexLoginJob,
   busy,
 }: {
   mailboxes: Mailbox[];
@@ -29,6 +30,7 @@ export function MailboxesPage({
   deleteMailboxes: (ids: number[]) => void;
   resetMailboxes: (ids: number[]) => void;
   startLoginJob: (ids: number[]) => void;
+  startCodexLoginJob: (ids: number[]) => void;
   busy: boolean;
 }) {
   const [selected, setSelected] = useState<number[]>([]);
@@ -120,7 +122,20 @@ export function MailboxesPage({
               disabled={busy || selected.length === 0}
               className="rounded-xl border bg-white px-3 py-2 font-bold disabled:opacity-50"
             >
-              批量登录
+              <span className="inline-flex items-center gap-2">
+                <KeyRound size={16} />
+                批量登录
+              </span>
+            </button>
+            <button
+              onClick={() => startCodexLoginJob(selected)}
+              disabled={busy || selected.length === 0}
+              className="rounded-xl border bg-white px-3 py-2 font-bold disabled:opacity-50"
+            >
+              <span className="inline-flex items-center gap-2">
+                <ShieldCheck size={16} />
+                批量 Codex 授权登录
+              </span>
             </button>
             <button
               onClick={confirmReset}
@@ -210,6 +225,12 @@ export function MailboxesPage({
                     className="rounded-xl border bg-white px-3 py-2 text-xs font-bold"
                   >
                     登录
+                  </button>
+                  <button
+                    onClick={() => startCodexLoginJob([m.id])}
+                    className="rounded-xl border bg-white px-3 py-2 text-xs font-bold"
+                  >
+                    Codex 授权登录
                   </button>
                   <button
                     onClick={() => resetMailboxes([m.id])}

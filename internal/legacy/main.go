@@ -33,6 +33,7 @@ const (
 	sentinelSDK              = sentinelBase + "/sentinel/20260124ceb8/sdk.js"
 	sentinelMaxAttempts      = 500000
 	sentinelErrorPrefix      = "wQ8Lk5FbGpA2NcR9dShT6gYjU7VxZ4D"
+	responseBodyCaptureLimit = 8 << 10
 )
 
 var (
@@ -581,6 +582,7 @@ func (w *worker) followConsentForCode(ctx context.Context, consentURL string) (s
 	if strings.HasPrefix(current, "/") {
 		current = authBase + current
 	}
+	logStep(w.mail, "Codex 授权登录: 开始跟随 consent 链路 start_url=%s", current)
 	noRedirect := *w.client
 	noRedirect.CheckRedirect = func(req *http.Request, via []*http.Request) error { return http.ErrUseLastResponse }
 	for i := 0; i < 10; i++ {
@@ -595,14 +597,24 @@ func (w *worker) followConsentForCode(ctx context.Context, consentURL string) (s
 		if err != nil {
 			return "", err
 		}
+		payload := map[string]any{}
+		data, _ := io.ReadAll(io.LimitReader(resp.Body, responseBodyCaptureLimit))
 		resp.Body.Close()
-		if code := oauthCode(resp.Request.URL.String()); code != "" {
-			return code, nil
+		if len(data) > 0 {
+			payload["body"] = string(data)
+		}
+		if resp.Request != nil && resp.Request.URL != nil {
+			payload["_final_url"] = resp.Request.URL.String()
 		}
 		location := strings.TrimSpace(resp.Header.Get("Location"))
-		if code := oauthCode(location); code != "" {
+		if location != "" {
+			payload["_location"] = location
+		}
+		if code := extractOAuthCodeFromPayload(payload); code != "" {
+			logStep(w.mail, "Codex 授权登录: consent 链路第 %d 跳已提取 code code_hash=%s, %s", i+1, shortSecretHash(code), detailSnippet(payload))
 			return code, nil
 		}
+		logStep(w.mail, "Codex 授权登录: consent 链路第 %d 跳 status=%d, %s", i+1, resp.StatusCode, detailSnippet(payload))
 		if location == "" || (resp.StatusCode < 300 || resp.StatusCode >= 400) {
 			break
 		}
@@ -612,41 +624,47 @@ func (w *worker) followConsentForCode(ctx context.Context, consentURL string) (s
 		}
 		current = next
 	}
+	logStep(w.mail, "Codex 授权登录: consent 链路未直接拿到 code，转入 workspace 选择补偿流程 start_url=%s", consentURL)
 	return w.selectWorkspaceForConsentCode(ctx, consentURL)
 }
 
 func (w *worker) selectWorkspaceForConsentCode(ctx context.Context, consentURL string) (string, error) {
 	workspaceID := w.authSessionWorkspaceID()
 	if workspaceID == "" {
+		logStep(w.mail, "Codex 授权登录: workspace 补偿流程未找到 auth-session 中的 workspace_id")
 		return "", nil
 	}
 	if strings.HasPrefix(consentURL, "/") {
 		consentURL = authBase + consentURL
 	}
 	headers := w.jsonHeaders(consentURL)
+	logStep(w.mail, "Codex 授权登录: 调用 workspace/select workspace_id=%s referer=%s", workspaceID, consentURL)
 	status, wsPayload, wsHeaders, err := w.requestDetailed(ctx, http.MethodPost, authBase+"/api/accounts/workspace/select", map[string]any{
 		"workspace_id": workspaceID,
 	}, headers, false)
 	if err != nil {
 		return "", err
 	}
-	if code := oauthCode(wsHeaders.Get("Location")); code != "" {
+	logStep(w.mail, "Codex 授权登录: workspace/select 返回 status=%d, %s", status, detailSnippet(mergeResponseMeta(wsPayload, wsHeaders)))
+	if code := extractOAuthCodeFromPayload(mergeResponseMeta(wsPayload, wsHeaders)); code != "" {
+		logStep(w.mail, "Codex 授权登录: workspace/select 已直接提取 code code_hash=%s", shortSecretHash(code))
 		return code, nil
 	}
-	if code := Clean(wsPayload["continue_url"]); oauthCode(code) != "" {
-		return oauthCode(code), nil
-	}
 	if status < 200 || status >= 400 {
-		return "", fmt.Errorf("workspace_select_http_%d", status)
+		return "", fmt.Errorf("workspace_select_http_%d%s", status, responseDetail(wsPayload))
 	}
 	data := StringMap(wsPayload["data"])
 	orgs := AsMapSlice(data["orgs"])
+	logStep(w.mail, "Codex 授权登录: workspace/select 解析 orgs=%d body_summary=%s", len(orgs), summarizeBodySnippet(Clean(wsPayload["body"])))
 	if len(orgs) == 0 {
-		return "", nil
+		fallbackTarget := consentFollowTarget(consentURL, wsPayload, wsHeaders)
+		logStep(w.mail, "Codex 授权登录: workspace/select 未返回 orgs，尝试继续跟随 fallback_target=%s", fallbackTarget)
+		return w.followConsentFallback(ctx, fallbackTarget)
 	}
 	orgID := Clean(orgs[0]["id"])
 	if orgID == "" {
-		return "", nil
+		logStep(w.mail, "Codex 授权登录: workspace/select 返回 orgs 但首个 org_id 为空，尝试继续跟随 consent")
+		return w.followConsentFallback(ctx, consentFollowTarget(consentURL, wsPayload, wsHeaders))
 	}
 	orgBody := map[string]any{"org_id": orgID}
 	if projects := AsMapSlice(orgs[0]["projects"]); len(projects) > 0 {
@@ -655,20 +673,71 @@ func (w *worker) selectWorkspaceForConsentCode(ctx context.Context, consentURL s
 		}
 	}
 	orgReferer := firstNonEmpty(Clean(wsPayload["continue_url"]), consentURL)
+	logStep(w.mail, "Codex 授权登录: 调用 organization/select org_id=%s project_id=%s referer=%s", orgID, Clean(orgBody["project_id"]), orgReferer)
 	status, orgPayload, orgHeaders, err := w.requestDetailed(ctx, http.MethodPost, authBase+"/api/accounts/organization/select", orgBody, w.jsonHeaders(orgReferer), false)
 	if err != nil {
 		return "", err
 	}
-	if code := oauthCode(orgHeaders.Get("Location")); code != "" {
-		return code, nil
-	}
-	if code := oauthCode(Clean(orgPayload["continue_url"])); code != "" {
+	logStep(w.mail, "Codex 授权登录: organization/select 返回 status=%d, %s", status, detailSnippet(mergeResponseMeta(orgPayload, orgHeaders)))
+	if code := extractOAuthCodeFromPayload(mergeResponseMeta(orgPayload, orgHeaders)); code != "" {
+		logStep(w.mail, "Codex 授权登录: organization/select 已提取 code code_hash=%s", shortSecretHash(code))
 		return code, nil
 	}
 	if status < 200 || status >= 400 {
-		return "", fmt.Errorf("organization_select_http_%d", status)
+		return "", fmt.Errorf("organization_select_http_%d%s", status, responseDetail(orgPayload))
 	}
+	fallbackTarget := consentFollowTarget(orgReferer, orgPayload, orgHeaders)
+	logStep(w.mail, "Codex 授权登录: organization/select 未直接返回 code，尝试继续跟随 fallback_target=%s", fallbackTarget)
+	return w.followConsentFallback(ctx, fallbackTarget)
+}
+
+func (w *worker) followConsentFallback(ctx context.Context, target string) (string, error) {
+	current := strings.TrimSpace(target)
+	if current == "" {
+		return "", nil
+	}
+	if strings.HasPrefix(current, "/") {
+		current = authBase + current
+	}
+	logStep(w.mail, "Codex 授权登录: fallback 开始多跳跟随 target=%s", current)
+	for i := 0; i < 10; i++ {
+		status, payload, err := w.request(ctx, http.MethodGet, current, nil, w.navigateHeaders(current), false)
+		if err != nil {
+			return "", err
+		}
+		logStep(w.mail, "Codex 授权登录: fallback 第 %d 跳返回 status=%d, %s", i+1, status, detailSnippet(payload))
+		if code := extractOAuthCodeFromPayload(payload); code != "" {
+			logStep(w.mail, "Codex 授权登录: fallback 第 %d 跳已提取 code code_hash=%s", i+1, shortSecretHash(code))
+			return code, nil
+		}
+		location := Clean(payload["_location"])
+		if location == "" || status < 300 || status >= 400 {
+			return "", nil
+		}
+		next, err := resolveLocation(current, location)
+		if err != nil {
+			return "", err
+		}
+		if next == current {
+			logStep(w.mail, "Codex 授权登录: fallback 第 %d 跳 location 未变化，停止跟随", i+1)
+			return "", nil
+		}
+		logStep(w.mail, "Codex 授权登录: fallback 第 %d 跳继续 location=%s", i+1, next)
+		current = next
+	}
+	logStep(w.mail, "Codex 授权登录: fallback 多跳跟随后仍未拿到 code")
 	return "", nil
+}
+
+func mergeResponseMeta(payload map[string]any, headers http.Header) map[string]any {
+	merged := CopyMap(payload)
+	if merged == nil {
+		merged = map[string]any{}
+	}
+	if location := strings.TrimSpace(headers.Get("Location")); location != "" {
+		merged["_location"] = location
+	}
+	return merged
 }
 
 func (w *worker) authSessionWorkspaceID() string {
@@ -821,7 +890,7 @@ func (w *worker) request(ctx context.Context, method, target string, payload any
 		if strings.Contains(resp.Header.Get("Content-Type"), "application/json") {
 			_ = DecodeJSON(resp.Body, &payloadMap)
 		} else {
-			data, _ := io.ReadAll(io.LimitReader(resp.Body, 2048))
+			data, _ := io.ReadAll(io.LimitReader(resp.Body, responseBodyCaptureLimit))
 			if len(data) > 0 {
 				payloadMap["body"] = string(data)
 			}
@@ -887,7 +956,7 @@ func (w *worker) requestDetailed(ctx context.Context, method, target string, pay
 		if strings.Contains(resp.Header.Get("Content-Type"), "application/json") {
 			_ = DecodeJSON(resp.Body, &payloadMap)
 		} else {
-			data, _ := io.ReadAll(io.LimitReader(resp.Body, 2048))
+			data, _ := io.ReadAll(io.LimitReader(resp.Body, responseBodyCaptureLimit))
 			if len(data) > 0 {
 				payloadMap["body"] = string(data)
 			}
@@ -1172,6 +1241,117 @@ func responseDetail(payload map[string]any) string {
 		return ""
 	}
 	return ", detail=" + string(data)
+}
+
+func detailSnippet(payload map[string]any) string {
+	if len(payload) == 0 {
+		return ""
+	}
+	parts := make([]string, 0, 8)
+	if finalURL := Clean(payload["_final_url"]); finalURL != "" {
+		parts = append(parts, "final_url="+finalURL)
+	}
+	if location := Clean(payload["_location"]); location != "" {
+		parts = append(parts, "location="+location)
+	}
+	if continueURL := Clean(payload["continue_url"]); continueURL != "" {
+		parts = append(parts, "continue_url="+continueURL)
+	}
+	pageType := Clean(StringMap(payload["page"])["type"])
+	if pageType != "" {
+		parts = append(parts, "page_type="+pageType)
+	}
+	if body := summarizeBodySnippet(Clean(payload["body"])); body != "" {
+		parts = append(parts, "body~="+body)
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return strings.Join(parts, ", ")
+}
+
+func summarizeBodySnippet(body string) string {
+	body = strings.TrimSpace(body)
+	if body == "" {
+		return ""
+	}
+	body = strings.ReplaceAll(body, "\n", " ")
+	body = strings.ReplaceAll(body, "\r", " ")
+	body = strings.ReplaceAll(body, "\t", " ")
+	body = strings.Join(strings.Fields(body), " ")
+	if len(body) > 240 {
+		body = body[:240] + "..."
+	}
+	return body
+}
+
+func findCallbackURL(targets ...string) string {
+	for _, target := range targets {
+		if found := extractCallbackURL(target); found != "" {
+			return found
+		}
+	}
+	return ""
+}
+
+func extractCallbackURL(text string) string {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return ""
+	}
+	for _, prefix := range []string{"http://localhost:1455/auth/callback", "https://localhost:1455/auth/callback"} {
+		idx := strings.Index(text, prefix)
+		if idx < 0 {
+			continue
+		}
+		candidate := text[idx:]
+		end := len(candidate)
+		for i, r := range candidate {
+			if i == 0 {
+				continue
+			}
+			switch r {
+			case '"', '\'', '<', '>', ' ', '\n', '\r', '\t':
+				end = i
+				goto done
+			}
+		}
+		done:
+		candidate = strings.Trim(candidate[:end], `"'()[]{}<>,`)
+		if strings.Contains(candidate, "code=") {
+			return candidate
+		}
+	}
+	return ""
+}
+
+func extractOAuthCodeFromPayload(payload map[string]any) string {
+	if len(payload) == 0 {
+		return ""
+	}
+	if code := oauthCode(Clean(payload["_location"])); code != "" {
+		return code
+	}
+	if code := oauthCode(Clean(payload["continue_url"])); code != "" {
+		return code
+	}
+	if code := oauthCode(Clean(payload["_final_url"])); code != "" {
+		return code
+	}
+	if callbackURL := findCallbackURL(Clean(payload["body"]), Clean(payload["continue_url"]), Clean(payload["_location"]), Clean(payload["_final_url"])); callbackURL != "" {
+		return oauthCode(callbackURL)
+	}
+	return ""
+}
+
+func consentFollowTarget(consentURL string, payload map[string]any, headers http.Header) string {
+	return firstNonEmpty(
+		Clean(headers.Get("Location")),
+		Clean(payload["continue_url"]),
+		Clean(payload["_location"]),
+		Clean(payload["_final_url"]),
+		consentURL,
+	)
 }
 
 func failedToCreateAccount(payload map[string]any) bool {

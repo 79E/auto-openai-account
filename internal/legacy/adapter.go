@@ -26,6 +26,10 @@ func MailboxFromDomain(item domain.Mailbox) Mailbox {
 	}
 }
 
+func MailboxCanFetchEmailOTP(item domain.Mailbox, settings domain.Settings) bool {
+	return MailboxFromDomain(item).CanFetchEmailOTP(SettingsFromDomain(settings, ""))
+}
+
 func SettingsFromDomain(settings domain.Settings, proxy string) Settings {
 	return Settings{
 		Proxy:                  proxy,

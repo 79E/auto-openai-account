@@ -29,6 +29,10 @@ const platforms = [
   { value: "hero-sms", label: "Hero SMS" },
 ];
 
+type SMSConfigForm = Omit<SMSConfig, "max_price"> & {
+  max_price: string;
+};
+
 function nextConfigName(configs: SMSConfig[]) {
   const names = new Set(configs.map((config) => config.name.trim()));
   let index = configs.length + 1;
@@ -36,18 +40,18 @@ function nextConfigName(configs: SMSConfig[]) {
   return `sms-${index}`;
 }
 
-function emptySMSConfig(configs: SMSConfig[]): SMSConfig {
+function emptySMSConfig(configs: SMSConfig[]): SMSConfigForm {
   return {
     name: nextConfigName(configs),
     platform: "smsbower",
     api_key: "",
     service_id: "dr",
     country_id: 38,
-    max_price: 0,
+    max_price: "0",
   };
 }
 
-function normalizeSMSConfig(config: SMSConfig): SMSConfig {
+function normalizeSMSConfig(config: SMSConfigForm): SMSConfig {
   return {
     name: config.name.trim(),
     platform: config.platform || "smsbower",
@@ -112,7 +116,7 @@ export function SmsSettingsPage({
   busy: boolean;
 }) {
   const smsConfigs = settingsDraft.sms_configs || [];
-  const [form, setForm] = useState<SMSConfig>(() => emptySMSConfig(smsConfigs));
+  const [form, setForm] = useState<SMSConfigForm>(() => emptySMSConfig(smsConfigs));
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [formError, setFormError] = useState("");
   const [saving, setSaving] = useState(false);
@@ -149,13 +153,20 @@ export function SmsSettingsPage({
     return countries;
   }, [catalog?.countries, form.country_id]);
 
-  function updateForm(updates: Partial<SMSConfig>) {
+  function updateForm(updates: Partial<SMSConfigForm>) {
     setForm((current) => ({ ...current, ...updates }));
     setFormError("");
     if ("platform" in updates || "api_key" in updates) {
       setCatalog(null);
       setCatalogError("");
     }
+  }
+
+  function toFormSMSConfig(config: SMSConfig): SMSConfigForm {
+    return {
+      ...config,
+      max_price: String(config.max_price ?? 0),
+    };
   }
 
   function resetForm(nextConfigs = smsConfigs) {
@@ -251,7 +262,7 @@ export function SmsSettingsPage({
 
   function startEdit(index: number) {
     setEditingIndex(index);
-    setForm({ ...smsConfigs[index] });
+    setForm(toFormSMSConfig(smsConfigs[index]));
     setFormError("");
     setCatalog(null);
     setCatalogError("");
@@ -471,19 +482,27 @@ export function SmsSettingsPage({
                 />
               </span>
             </label>
-            <label className="text-sm font-bold text-slate-600 md:col-span-2">
-              最高价格
-              <input
-                className={inputClass}
-                type="number"
-                min={0}
-                step="0.0001"
-                value={form.max_price}
-                onChange={(event) =>
-                  updateForm({ max_price: Number(event.target.value) })
-                }
-              />
-            </label>
+<label className="text-sm font-bold text-slate-600 md:col-span-2">
+                最高价格
+                <input
+                  className={inputClass}
+                  type="number"
+                  min={0}
+                  step="0.0001"
+                  value={form.max_price}
+                  placeholder={"0"}
+                  onChange={(event) => {
+                    const raw = event.target.value;
+                    if (raw === "") {
+                      updateForm({ max_price: "" });
+                      return;
+                    }
+                    if (/^(\d+)?(\.\d*)?$/.test(raw)) {
+                      updateForm({ max_price: raw });
+                    }
+                  }}
+                />
+              </label>
           </div>
           {formError && (
             <div className="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700">

@@ -44,6 +44,23 @@ type Mailbox struct {
 	UpdatedAt        string `json:"updated_at"`
 }
 
+func (m Mailbox) CanFetchEmailOTP(settings Settings) bool {
+	settings = normalizeSettings(settings)
+	if Clean(m.Email) == "" {
+		return false
+	}
+	if settings.IMAPAuthMode == "password" {
+		return Clean(m.Password) != ""
+	}
+	if Clean(m.ClientID) != "" && Clean(m.AccessToken) != "" {
+		return true
+	}
+	if settings.IMAPAuthMode == "auto" {
+		return Clean(m.Password) != ""
+	}
+	return false
+}
+
 type RegisterJob struct {
 	ID              int64             `json:"id"`
 	Status          string            `json:"status"`

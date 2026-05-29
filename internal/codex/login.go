@@ -41,6 +41,7 @@ type LoginOptions struct {
 	Password                 string
 	Proxy                    string
 	SMSProvider              SMSProvider
+	OTPFetcher               func(context.Context) (string, error)
 	ProgressChan             chan<- LoginProgress
 	MaxPhoneAttempts         int
 	PasswordVerifyRetries    int
@@ -59,6 +60,7 @@ func LoginWithCodex(ctx context.Context, opts LoginOptions) (*LoginResult, error
 		Password:                 opts.Password,
 		Proxy:                    opts.Proxy,
 		SMSProvider:              opts.SMSProvider,
+		OTPFetcher:               opts.OTPFetcher,
 		MaxPhoneAttempts:         opts.MaxPhoneAttempts,
 		PasswordVerifyRetries:    opts.PasswordVerifyRetries,
 		PasswordVerifyRetryDelay: opts.PasswordVerifyRetryDelay,

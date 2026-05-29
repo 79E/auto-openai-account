@@ -14,6 +14,7 @@ export function CreateTaskModal({
   settings,
   mailboxes,
   busy,
+  codexLoginTargetIds,
   onClose,
   onCreateRegister,
   onCreateLogin,
@@ -21,6 +22,7 @@ export function CreateTaskModal({
   settings: SettingsPayload;
   mailboxes: Mailbox[];
   busy: boolean;
+  codexLoginTargetIds?: number[];
   onClose: () => void;
   onCreateRegister: (
     settings: SettingsPayload,
@@ -39,7 +41,11 @@ export function CreateTaskModal({
   const used = mailboxes.filter(
     (item) => item.status !== "new" && Boolean(item.register_password || item.password),
   );
-  const [flow, setFlow] = useState<TaskFlow>("register_login");
+  const codexTargetIds = codexLoginTargetIds || [];
+  const forcedCodexLogin = codexTargetIds.length > 0;
+  const [flow, setFlow] = useState<TaskFlow>(
+    forcedCodexLogin ? "codex_login" : "register_login",
+  );
   const [draft, setDraft] = useState<SettingsPayload>({
     ...settings,
     fixed_password: settings.fixed_password || defaultPassword,
@@ -52,9 +58,9 @@ export function CreateTaskModal({
   );
   const isRegisterFlow = ["register_login", "register_codex"].includes(flow);
   const isCodexFlow = flow === "register_codex" || flow === "codex_login";
-  const loginCandidates = used.filter(
-    (item) => loginFilter === "used" || item.status === loginFilter,
-  );
+  const loginCandidates = forcedCodexLogin
+    ? used.filter((item) => codexTargetIds.includes(item.id))
+    : used.filter((item) => loginFilter === "used" || item.status === loginFilter);
   const selectedSMSExists =
     !isCodexFlow ||
     draft.sms_configs.some((config) => config.name.trim() === smsConfigName.trim());
@@ -74,20 +80,24 @@ export function CreateTaskModal({
         smsConfigName,
       );
   }
-  const flowOptions: { value: TaskFlow; label: string }[] = [
-    { value: "register_login", label: "注册 + 普通登录" },
-    { value: "register_codex", label: "注册 + 普通登录 + Codex 授权登录" },
-    { value: "login", label: "普通登录" },
-    { value: "codex_login", label: "Codex 授权登录" },
-  ];
+  const flowOptions: { value: TaskFlow; label: string }[] = forcedCodexLogin
+    ? [{ value: "codex_login", label: "Codex 授权登录" }]
+    : [
+        { value: "register_login", label: "注册 + 普通登录" },
+        { value: "register_codex", label: "注册 + 普通登录 + Codex 授权登录" },
+        { value: "login", label: "普通登录" },
+        { value: "codex_login", label: "Codex 授权登录" },
+      ];
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-3 backdrop-blur-sm">
       <div className="w-full max-w-3xl rounded-2xl border bg-white p-4 shadow-soft">
         <div className="mb-4 flex items-center justify-between">
           <div>
-            <h2 className="text-lg font-black">创建任务</h2>
+            <h2 className="text-lg font-black">{forcedCodexLogin ? "创建 Codex 授权登录任务" : "创建任务"}</h2>
             <p className="mt-1 text-sm text-slate-500">
-              选择任务类型，并配置本次任务参数。
+              {forcedCodexLogin
+                ? "为当前勾选邮箱选择 SMS 配置后，直接创建 Codex 授权登录任务。"
+                : "选择任务类型，并配置本次任务参数。"}
             </p>
           </div>
           <button
@@ -180,25 +190,27 @@ export function CreateTaskModal({
             )}
           </div>
         )}
-        {!isRegisterFlow && (
+        {(!isRegisterFlow || forcedCodexLogin) && (
           <div className="mt-3 grid gap-3 md:grid-cols-1">
-            <Field label="邮箱状态筛选">
-              <select
-                className={`${styles.input} ${styles.selectInput}`}
-                value={loginFilter}
-                onChange={(e) => setLoginFilter(e.target.value)}
-              >
-                <option value="used">全部已使用</option>
-                <option value="registered">已注册</option>
-                <option value="abnormal">异常</option>
-              </select>
-              <p className="mt-2 text-sm text-slate-500">
-                <span className="font-bold text-slate-800">
-                  {loginCandidates.length}
-                </span>{" "}
-                个邮箱将创建登录任务
-              </p>
-            </Field>
+            {!forcedCodexLogin && (
+              <Field label="邮箱状态筛选">
+                <select
+                  className={`${styles.input} ${styles.selectInput}`}
+                  value={loginFilter}
+                  onChange={(e) => setLoginFilter(e.target.value)}
+                >
+                  <option value="used">全部已使用</option>
+                  <option value="registered">已注册</option>
+                  <option value="abnormal">异常</option>
+                </select>
+              </Field>
+            )}
+            <p className="text-sm text-slate-500">
+              <span className="font-bold text-slate-800">
+                {loginCandidates.length}
+              </span>{" "}
+              {forcedCodexLogin ? "个已勾选邮箱将创建 Codex 授权登录任务" : "个邮箱将创建登录任务"}
+            </p>
           </div>
         )}
         {isCodexFlow && (

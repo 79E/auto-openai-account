@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -191,17 +192,35 @@ func NowISO() string {
 }
 
 var LogHook func(email, message string)
+var ConsoleLogEnabled = envBool("AUTO_OPENAI_ACCOUNT_CONSOLE_LOG", true)
 
 func logStep(email, format string, args ...any) {
 	message := fmt.Sprintf(format, args...)
 	if LogHook != nil {
 		LogHook(Clean(email), message)
 	}
+	if !ConsoleLogEnabled {
+		return
+	}
 	if Clean(email) != "" {
 		fmt.Printf("[%s] [%s] %s\n", NowLocal(), Clean(email), message)
 		return
 	}
 	fmt.Printf("[%s] %s\n", NowLocal(), message)
+}
+
+func envBool(name string, fallback bool) bool {
+	value := strings.ToLower(strings.TrimSpace(os.Getenv(name)))
+	switch value {
+	case "1", "true", "yes", "y", "on":
+		return true
+	case "0", "false", "no", "n", "off":
+		return false
+	case "":
+		return fallback
+	default:
+		return fallback
+	}
 }
 
 func shortSecretHash(value string) string {
@@ -236,6 +255,8 @@ func ExplainError(message string) string {
 		reason = "创建账号资料失败：验证码校验后创建账号阶段被上游拒绝，可能是风控、代理环境或邮箱域名限制导致。"
 	case strings.Contains(lower, "password_verify_http_"):
 		reason = "登录密码校验失败：账号密码没有通过上游校验，请确认保存的注册密码是否正确。"
+	case strings.Contains(lower, "no phone numbers available") || strings.Contains(lower, "failed to verify phone"):
+		reason = "获取手机号失败：短信平台当前没有可用手机号，请检查平台余额、服务库存和国家配置，或更换短信平台。"
 	case strings.Contains(lower, "oauth_token_http_") || strings.Contains(lower, "token exchange"):
 		reason = "换取 token 失败：上游授权成功后没有正常返回 token，可能是授权回调、代理或会话状态异常。"
 	default:

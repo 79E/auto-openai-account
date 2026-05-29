@@ -65,7 +65,7 @@ function App() {
   const [mailboxDetail, setMailboxDetail] = useState<Mailbox | null>(null);
   const [mailboxDetailDraft, setMailboxDetailDraft] =
     useState<MailboxUpdate | null>(null);
-  const [credentialsOpen, setCredentialsOpen] = useState(false);
+  const [mailboxCodexTarget, setMailboxCodexTarget] = useState<number[] | null>(null);
   const [tokenExportConfirm, setTokenExportConfirm] =
     useState<TokenExportConfirm>(null);
   const [themePreference, setThemePreference] =
@@ -289,6 +289,7 @@ function App() {
       });
       setActiveJob(job);
       setTaskOpen(false);
+      setMailboxCodexTarget(null);
       showToast(`登录任务 #${job.id} 已启动`, "success");
       await refresh(job.id);
     } catch (error) {
@@ -299,6 +300,12 @@ function App() {
     } finally {
       setBusy(false);
     }
+  }
+
+  function openCodexLoginTask(ids: number[]) {
+    if (!settingsDraft || ids.length === 0) return;
+    setMailboxCodexTarget(ids);
+    setTaskOpen(true);
   }
 
   async function deleteMailboxes(ids: number[]) {
@@ -511,7 +518,11 @@ function App() {
             settings={settingsDraft}
             mailboxes={mailboxes}
             busy={busy}
-            onClose={() => setTaskOpen(false)}
+            codexLoginTargetIds={mailboxCodexTarget || undefined}
+            onClose={() => {
+              setTaskOpen(false);
+              setMailboxCodexTarget(null);
+            }}
             onCreateRegister={createRegisterTask}
             onCreateLogin={createLoginTask}
           />
@@ -573,6 +584,7 @@ function App() {
                 startLoginJob={(ids) =>
                   settingsDraft && createLoginTask(settingsDraft, ids)
                 }
+                startCodexLoginJob={openCodexLoginTask}
                 busy={busy}
               />
             }

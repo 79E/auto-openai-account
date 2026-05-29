@@ -391,6 +391,13 @@ func (r *Runner) runCodexLoginAfterStarted(ctx context.Context, jobID int64, mai
 		return
 	}
 	defer provider.Close()
+	legacyMailbox := legacy.MailboxFromDomain(mailbox)
+	legacySettings := legacy.SettingsFromDomain(settings, proxy)
+	otpProvider := legacy.OTPProvider{Settings: legacySettings, Mailbox: legacyMailbox, Since: started}
+	canFetchEmailOTP := legacyMailbox.CanFetchEmailOTP(legacySettings)
+	if !canFetchEmailOTP {
+		r.log(domain.RuntimeLog{JobID: jobID, MailboxID: mailbox.ID, Email: mailbox.Email, Level: "info", Step: prefix + "_email_otp_unavailable", Message: "邮箱认证必要数据不完整，Codex 登录将仅尝试密码登录"})
+	}
 	progressCh := make(chan codex.LoginProgress, 32)
 	progressDone := make(chan struct{})
 	go func() {
@@ -409,6 +416,12 @@ func (r *Runner) runCodexLoginAfterStarted(ctx context.Context, jobID int64, mai
 		Password:                 mailboxLoginPassword(mailbox),
 		Proxy:                    proxy,
 		SMSProvider:              &codexSMSProvider{provider: provider, config: smsConfig},
+		OTPFetcher:               func(ctx context.Context) (string, error) {
+			if !canFetchEmailOTP {
+				return "", fmt.Errorf("mailbox is missing required email auth data for otp fallback")
+			}
+			return otpProvider.Fetch(ctx)
+		},
 		ProgressChan:             progressCh,
 		MaxPhoneAttempts:         3,
 		PasswordVerifyRetries:    codexPasswordVerifyRetries(prefix),
@@ -515,6 +528,7 @@ func (r *Runner) failCodexJobItem(jobID int64, mailbox domain.Mailbox, prefix st
 	if prefix == "" {
 		prefix = "codex"
 	}
+	message = legacy.ExplainError(message)
 	_ = r.store.MarkMailboxLoginResult(mailbox.ID, "", message)
 	_ = r.store.UpdateJobItem(jobID, mailbox.ID, "failed", message, duration)
 	_ = r.store.RecalculateJob(jobID, "")
@@ -551,6 +565,7 @@ func (p *codexSMSProvider) Cancel(ctx context.Context, activationID string) erro
 }
 
 func (r *Runner) log(entry domain.RuntimeLog) {
+	entry.Message = semanticRuntimeMessage(entry)
 	entry, err := r.store.AddLog(entry)
 	if err != nil {
 		return
@@ -579,8 +594,25 @@ func (r *Runner) handleLegacyLog(email, message string) {
 	if step != "" {
 		_ = r.store.MarkMailboxStep(ctx.MailboxID, domain.MailboxStatusRegistering, step, stepIndex, stepTotal, ctx.Proxy)
 	}
-	r.log(domain.RuntimeLog{JobID: ctx.JobID, MailboxID: ctx.MailboxID, Email: ctx.Email, Level: "info", Step: step, StepIndex: stepIndex, StepTotal: stepTotal, Message: uiLogMessage(message)})
+	r.log(domain.RuntimeLog{JobID: ctx.JobID, MailboxID: ctx.MailboxID, Email: ctx.Email, Level: "info", Step: step, StepIndex: stepIndex, StepTotal: stepTotal, Message: semanticUILogMessage(message)})
 
+}
+
+func semanticRuntimeMessage(entry domain.RuntimeLog) string {
+	message := strings.TrimSpace(entry.Message)
+	if message == "" || entry.Level != "error" || strings.Contains(message, "原始错误：") {
+		return message
+	}
+	return legacy.ExplainError(message)
+}
+
+func semanticUILogMessage(message string) string {
+	base := uiLogMessage(message)
+	details := safeLogDetails(message)
+	if details == "" || strings.Contains(base, details) {
+		return base
+	}
+	return base + "（" + details + "）"
 }
 
 func uiLogMessage(message string) string {
@@ -682,6 +714,57 @@ func stripLogDetails(message string) string {
 		}
 	}
 	return message
+}
+
+func safeLogDetails(message string) string {
+	fields := []string{}
+	for _, key := range []string{"status", "page_type", "passwordless_disabled", "attempt", "timeout", "poll", "imap", "auth", "endpoint", "password_len", "sentinel_token_len", "token_len", "location"} {
+		if value := logDetailValue(message, key); value != "" {
+			fields = append(fields, key+"="+value)
+		}
+	}
+	if errCode := responseErrorCode(message); errCode != "" {
+		fields = append(fields, "error_code="+errCode)
+	}
+	return strings.Join(fields, "，")
+}
+
+func logDetailValue(message, key string) string {
+	marker := key + "="
+	idx := strings.Index(message, marker)
+	if idx < 0 {
+		return ""
+	}
+	value := message[idx+len(marker):]
+	if value == "" {
+		return ""
+	}
+	if value[0] == '"' {
+		end := strings.Index(value[1:], "\"")
+		if end >= 0 {
+			return value[:end+2]
+		}
+	}
+	for i, r := range value {
+		if r == ' ' || r == ',' || r == '，' || r == ')' || r == '）' {
+			return value[:i]
+		}
+	}
+	return value
+}
+
+func responseErrorCode(message string) string {
+	marker := `"code":"`
+	idx := strings.Index(message, marker)
+	if idx < 0 {
+		return ""
+	}
+	value := message[idx+len(marker):]
+	end := strings.Index(value, `"`)
+	if end < 0 {
+		return ""
+	}
+	return value[:end]
 }
 
 func (r *Runner) setActive(email string, ctx activeLogContext) {
