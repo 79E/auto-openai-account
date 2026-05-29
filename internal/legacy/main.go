@@ -12,6 +12,7 @@ import (
 	"math"
 	mathrand "math/rand"
 	"net/http"
+	"net/http/cookiejar"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -44,10 +45,13 @@ var (
 )
 
 type worker struct {
-	client     *http.Client
-	deviceID   string
-	mail       string
-	otpFetcher func(context.Context) (string, error)
+	client          *http.Client
+	deviceID        string
+	mail            string
+	proxy           string
+	timeout         time.Duration
+	otpFetcher      func(context.Context) (string, error)
+	proxyController ProxyController
 }
 
 type appConfig struct {
@@ -173,30 +177,97 @@ func runCLI() {
 }
 
 func newWorker(proxy, email string) (*worker, error) {
-	return newWorkerWithOTP(proxy, email, nil)
+	return newWorkerWithOTP(proxy, email, nil, nil)
 }
 
-func newWorkerWithOTP(proxy, email string, otpFetcher func(context.Context) (string, error)) (*worker, error) {
+func newWorkerWithOTP(proxy, email string, otpFetcher func(context.Context) (string, error), controller ProxyController) (*worker, error) {
 	deviceID := NewUUID()
-	client, err := httpClientForProxy(strings.TrimSpace(proxy), 60*time.Second, deviceID)
+	proxy = strings.TrimSpace(proxy)
+	timeout := 60 * time.Second
+	client, err := httpClientForProxy(proxy, timeout, deviceID, nil)
 	if err != nil {
 		return nil, err
 	}
-	return &worker{client: client, deviceID: deviceID, mail: email, otpFetcher: otpFetcher}, nil
+	return &worker{client: client, deviceID: deviceID, mail: email, proxy: proxy, timeout: timeout, otpFetcher: otpFetcher, proxyController: controller}, nil
 }
 
-func httpClientForProxy(proxy string, timeout time.Duration, deviceID string) (*http.Client, error) {
-	return httpClientForProxyStub(proxy, timeout, deviceID)
+func httpClientForProxy(proxy string, timeout time.Duration, deviceID string, jar http.CookieJar) (*http.Client, error) {
+	return httpClientForProxyStub(proxy, timeout, deviceID, jar)
 }
 
-func httpClientForProxyStub(proxy string, timeout time.Duration, deviceID string) (*http.Client, error) {
-	return browserHTTPClient(proxy, timeout), nil
+func httpClientForProxyStub(proxy string, timeout time.Duration, deviceID string, jar http.CookieJar) (*http.Client, error) {
+	client := browserHTTPClient(proxy, timeout)
+	if jar == nil {
+		var err error
+		jar, err = cookiejar.New(nil)
+		if err != nil {
+			return nil, err
+		}
+	}
+	client.Jar = jar
+	return client, nil
 }
 
 func (w *worker) close() {
 	if w.client != nil {
 		w.client.CloseIdleConnections()
 	}
+}
+
+func (w *worker) ensureProxyClient() error {
+	if w == nil {
+		return nil
+	}
+	proxy := strings.TrimSpace(w.proxy)
+	if w.proxyController != nil {
+		proxy = strings.TrimSpace(w.proxyController.CurrentProxy())
+	}
+	if w.client != nil && proxy == w.proxy {
+		return nil
+	}
+	var jar http.CookieJar
+	if w.client != nil {
+		jar = w.client.Jar
+		w.client.CloseIdleConnections()
+	}
+	client, err := httpClientForProxy(proxy, w.timeout, w.deviceID, jar)
+	if err != nil {
+		return err
+	}
+	w.client = client
+	w.proxy = proxy
+	return nil
+}
+
+func (w *worker) handleRequestFailure(target string, err error) bool {
+	if w == nil || w.proxyController == nil || err == nil {
+		return false
+	}
+	nextProxy, switched := w.proxyController.HandleRequestFailure(target, err)
+	if !switched {
+		return false
+	}
+	if err := w.ensureProxyClientWithValue(nextProxy); err != nil {
+		return false
+	}
+	logStep(w.mail, "代理连接失败，切换代理后重试 proxy=%s target=%s err=%v", nextProxy, target, err)
+	return true
+}
+
+func (w *worker) ensureProxyClientWithValue(proxy string) error {
+	proxy = strings.TrimSpace(proxy)
+	var jar http.CookieJar
+	if w.client != nil {
+		jar = w.client.Jar
+		w.client.CloseIdleConnections()
+	}
+	client, err := httpClientForProxy(proxy, w.timeout, w.deviceID, jar)
+	if err != nil {
+		return err
+	}
+	w.client = client
+	w.proxy = proxy
+	return nil
 }
 
 func (w *worker) platformAuthorize(ctx context.Context, email string) error {
@@ -593,8 +664,17 @@ func (w *worker) followConsentForCode(ctx context.Context, consentURL string) (s
 		for key, value := range w.navigateHeaders(current) {
 			req.Header.Set(key, value)
 		}
+		if err := w.ensureProxyClient(); err != nil {
+			return "", err
+		}
 		resp, err := noRedirect.Do(req)
 		if err != nil {
+			if w.handleRequestFailure(current, err) {
+				i--
+				noRedirect = *w.client
+				noRedirect.CheckRedirect = func(req *http.Request, via []*http.Request) error { return http.ErrUseLastResponse }
+				continue
+			}
 			return "", err
 		}
 		payload := map[string]any{}
@@ -811,6 +891,9 @@ func (w *worker) buildSentinelToken(ctx context.Context, flow string) (string, e
 func (w *worker) requestRawJSON(ctx context.Context, method, target string, body []byte, headers map[string]string) (int, map[string]any, error) {
 	var lastErr error
 	for attempt := 0; attempt < 3; attempt++ {
+		if err := w.ensureProxyClient(); err != nil {
+			return 0, nil, err
+		}
 		req, err := http.NewRequestWithContext(ctx, method, target, strings.NewReader(string(body)))
 		if err != nil {
 			return 0, nil, err
@@ -824,6 +907,10 @@ func (w *worker) requestRawJSON(ctx context.Context, method, target string, body
 		if err != nil {
 			debugRequestError(method, target, attempt, err)
 			lastErr = err
+			if w.handleRequestFailure(target, err) {
+				attempt--
+				continue
+			}
 			if attempt < 2 {
 				time.Sleep(time.Second)
 				continue
@@ -853,14 +940,18 @@ func (w *worker) request(ctx context.Context, method, target string, payload any
 		}
 		bodyData = data
 	}
-	client := w.client
-	if !followRedirects {
-		clone := *w.client
-		clone.CheckRedirect = func(req *http.Request, via []*http.Request) error { return http.ErrUseLastResponse }
-		client = &clone
-	}
+	var client *http.Client
 	var lastErr error
 	for attempt := 0; attempt < 3; attempt++ {
+		if err := w.ensureProxyClient(); err != nil {
+			return 0, nil, err
+		}
+		client = w.client
+		if !followRedirects {
+			clone := *w.client
+			clone.CheckRedirect = func(req *http.Request, via []*http.Request) error { return http.ErrUseLastResponse }
+			client = &clone
+		}
 		if payload != nil {
 			body = strings.NewReader(string(bodyData))
 		}
@@ -877,6 +968,10 @@ func (w *worker) request(ctx context.Context, method, target string, payload any
 		if err != nil {
 			debugRequestError(method, target, attempt, err)
 			lastErr = err
+			if w.handleRequestFailure(target, err) {
+				attempt--
+				continue
+			}
 			if attempt < 2 {
 				time.Sleep(time.Second)
 				continue
@@ -919,14 +1014,18 @@ func (w *worker) requestDetailed(ctx context.Context, method, target string, pay
 		}
 		bodyData = data
 	}
-	client := w.client
-	if !followRedirects {
-		clone := *w.client
-		clone.CheckRedirect = func(req *http.Request, via []*http.Request) error { return http.ErrUseLastResponse }
-		client = &clone
-	}
+	var client *http.Client
 	var lastErr error
 	for attempt := 0; attempt < 3; attempt++ {
+		if err := w.ensureProxyClient(); err != nil {
+			return 0, nil, nil, err
+		}
+		client = w.client
+		if !followRedirects {
+			clone := *w.client
+			clone.CheckRedirect = func(req *http.Request, via []*http.Request) error { return http.ErrUseLastResponse }
+			client = &clone
+		}
 		if payload != nil {
 			body = strings.NewReader(string(bodyData))
 		}
@@ -943,6 +1042,10 @@ func (w *worker) requestDetailed(ctx context.Context, method, target string, pay
 		if err != nil {
 			debugRequestError(method, target, attempt, err)
 			lastErr = err
+			if w.handleRequestFailure(target, err) {
+				attempt--
+				continue
+			}
 			if attempt < 2 {
 				time.Sleep(time.Second)
 				continue
@@ -984,6 +1087,9 @@ func (w *worker) requestForm(ctx context.Context, target string, form url.Values
 	}
 	var lastErr error
 	for attempt := 0; attempt < 3; attempt++ {
+		if err := w.ensureProxyClient(); err != nil {
+			return 0, nil, err
+		}
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, target, strings.NewReader(string(body)))
 		if err != nil {
 			return 0, nil, err
@@ -995,6 +1101,10 @@ func (w *worker) requestForm(ctx context.Context, target string, form url.Values
 		if err != nil {
 			debugRequestError(http.MethodPost, target, attempt, err)
 			lastErr = err
+			if w.handleRequestFailure(target, err) {
+				attempt--
+				continue
+			}
 			if attempt < 2 {
 				time.Sleep(time.Second)
 				continue

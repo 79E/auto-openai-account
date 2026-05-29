@@ -58,7 +58,7 @@ export function MailboxDetailModal({
             onChange={(event) =>
               onUpdateDraft("register_password", event.target.value)
             }
-            className="w-full rounded-xl border bg-white px-3 py-2 font-mono text-sm outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 font-mono text-sm outline-none transition focus:border-blue-500"
             placeholder="OpenAI 登录密码"
           />
         </Field>
@@ -101,7 +101,7 @@ export function MailboxDetailModal({
                 detailDraft.access_token || "",
               ].join("----")}
               onChange={(event) => onUpdateCredentialLine(event.target.value)}
-              className="mt-2 h-24 w-full rounded-xl border bg-white p-3 font-mono text-xs outline-none focus:ring-2 focus:ring-blue-500"
+              className="mt-2 h-24 w-full rounded-xl border border-slate-200 bg-white p-3 font-mono text-xs outline-none transition focus:border-blue-500"
               placeholder="email@example.com----password----client_id----refresh_token"
             />
           )}

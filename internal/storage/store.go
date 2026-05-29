@@ -101,6 +101,9 @@ func (s *Store) LoadSettings() (domain.Settings, error) {
 
 func (s *Store) SaveSettings(settings domain.Settings) error {
 	settings = domain.NormalizeSettings(settings)
+	if err := domain.ValidateSettings(settings); err != nil {
+		return err
+	}
 	data, err := json.Marshal(settings)
 	if err != nil {
 		return err
@@ -109,12 +112,17 @@ func (s *Store) SaveSettings(settings domain.Settings) error {
 	if err := json.Unmarshal(data, &values); err != nil {
 		return err
 	}
+	delete(values, "proxy_mode")
+	delete(values, "proxies")
 	tx, err := s.db.Begin()
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
 	ts := now()
+	if _, err := tx.Exec(`DELETE FROM settings WHERE key IN ('proxy_mode', 'proxies')`); err != nil {
+		return err
+	}
 	for k, v := range values {
 		enc, _ := json.Marshal(v)
 		if _, err := tx.Exec(`INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`, k, string(enc), ts); err != nil {

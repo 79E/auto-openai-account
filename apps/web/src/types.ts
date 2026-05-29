@@ -95,9 +95,14 @@ export type SMSCatalog = {
   countries: SMSCatalogCountry[];
 };
 
-export type SettingsPayload = {
-  proxy_mode: string;
+export type ProxyGroup = {
+  name: string;
+  mode: string;
   proxies: string[];
+};
+
+export type SettingsPayload = {
+  proxy_groups: ProxyGroup[];
   register_concurrency: number;
   password_mode: string;
   fixed_password: string;

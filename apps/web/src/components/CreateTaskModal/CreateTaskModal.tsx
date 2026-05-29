@@ -15,6 +15,7 @@ export function CreateTaskModal({
   mailboxes,
   busy,
   codexLoginTargetIds,
+  loginTargetIds,
   onClose,
   onCreateRegister,
   onCreateLogin,
@@ -23,18 +24,21 @@ export function CreateTaskModal({
   mailboxes: Mailbox[];
   busy: boolean;
   codexLoginTargetIds?: number[];
+  loginTargetIds?: number[];
   onClose: () => void;
   onCreateRegister: (
     settings: SettingsPayload,
     count: number,
     flow: TaskFlow,
     smsConfigName: string,
+    proxyGroupName: string,
   ) => void;
   onCreateLogin: (
     settings: SettingsPayload,
     ids: number[],
     flow: TaskFlow,
     smsConfigName: string,
+    proxyGroupName: string,
   ) => void;
 }) {
   const unused = mailboxes.filter((item) => item.status === "new");
@@ -42,61 +46,83 @@ export function CreateTaskModal({
     (item) => item.status !== "new" && Boolean(item.register_password || item.password),
   );
   const codexTargetIds = codexLoginTargetIds || [];
+  const loginTargetIdsResolved = loginTargetIds || [];
   const forcedCodexLogin = codexTargetIds.length > 0;
+  const forcedLogin = loginTargetIdsResolved.length > 0;
   const [flow, setFlow] = useState<TaskFlow>(
-    forcedCodexLogin ? "codex_login" : "register_login",
+    forcedCodexLogin ? "codex_login" : forcedLogin ? "login" : "register_login",
   );
   const [draft, setDraft] = useState<SettingsPayload>({
     ...settings,
     fixed_password: settings.fixed_password || defaultPassword,
     sms_configs: settings.sms_configs || [],
+    proxy_groups: settings.proxy_groups || [],
   });
   const [count, setCount] = useState(Math.min(1, unused.length));
   const [loginFilter, setLoginFilter] = useState("used");
   const [smsConfigName, setSMSConfigName] = useState(
     draft.sms_configs[0]?.name || "",
   );
+  const [proxyTarget, setProxyTarget] = useState("");
   const isRegisterFlow = ["register_login", "register_codex"].includes(flow);
   const isCodexFlow = flow === "register_codex" || flow === "codex_login";
   const loginCandidates = forcedCodexLogin
     ? used.filter((item) => codexTargetIds.includes(item.id))
+    : forcedLogin
+      ? used.filter((item) => loginTargetIdsResolved.includes(item.id))
     : used.filter((item) => loginFilter === "used" || item.status === loginFilter);
   const selectedSMSExists =
     !isCodexFlow ||
     draft.sms_configs.some((config) => config.name.trim() === smsConfigName.trim());
+
   function submit() {
-    if (isRegisterFlow)
+    if (isRegisterFlow) {
       onCreateRegister(
         draft,
         Math.max(1, Math.min(count, unused.length)),
         flow,
         smsConfigName,
+        proxyTarget,
       );
-    else
-      onCreateLogin(
-        draft,
-        loginCandidates.map((item) => item.id),
-        flow,
-        smsConfigName,
-      );
+      return;
+    }
+    onCreateLogin(
+      draft,
+      loginCandidates.map((item) => item.id),
+      flow,
+      smsConfigName,
+      proxyTarget,
+    );
   }
+
   const flowOptions: { value: TaskFlow; label: string }[] = forcedCodexLogin
     ? [{ value: "codex_login", label: "Codex 授权登录" }]
+    : forcedLogin
+      ? [{ value: "login", label: "普通登录" }]
     : [
         { value: "register_login", label: "注册 + 普通登录" },
         { value: "register_codex", label: "注册 + 普通登录 + Codex 授权登录" },
         { value: "login", label: "普通登录" },
         { value: "codex_login", label: "Codex 授权登录" },
       ];
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-3 backdrop-blur-sm">
       <div className="w-full max-w-3xl rounded-2xl border bg-white p-4 shadow-soft">
         <div className="mb-4 flex items-center justify-between">
           <div>
-            <h2 className="text-lg font-black">{forcedCodexLogin ? "创建 Codex 授权登录任务" : "创建任务"}</h2>
+            <h2 className="text-lg font-black">
+              {forcedCodexLogin
+                ? "创建 Codex 授权登录任务"
+                : forcedLogin
+                  ? "创建普通登录任务"
+                  : "创建任务"}
+            </h2>
             <p className="mt-1 text-sm text-slate-500">
               {forcedCodexLogin
-                ? "为当前勾选邮箱选择 SMS 配置后，直接创建 Codex 授权登录任务。"
+                ? "为当前勾选邮箱选择 SMS 配置和代理来源后，直接创建 Codex 授权登录任务。"
+                : forcedLogin
+                  ? "为当前勾选邮箱选择并发数量和代理来源后，直接创建普通登录任务。"
                 : "选择任务类型，并配置本次任务参数。"}
             </p>
           </div>
@@ -107,7 +133,7 @@ export function CreateTaskModal({
             ✕
           </button>
         </div>
-        {!forcedCodexLogin && (
+        {!forcedCodexLogin && !forcedLogin && (
           <div className="mb-3 flex flex-wrap gap-2">
             {flowOptions.map((option) => (
               <button
@@ -140,18 +166,18 @@ export function CreateTaskModal({
               }
             />
           </Field>
-          <Field label="代理模式">
+          <Field label="代理选择">
             <select
               className={`${styles.input} ${styles.selectInput}`}
-              value={draft.proxy_mode}
-              onChange={(e) =>
-                setDraft({ ...draft, proxy_mode: e.target.value })
-              }
+              value={proxyTarget}
+              onChange={(e) => setProxyTarget(e.target.value)}
             >
-              <option value="local">本地网络（不使用代理）</option>
-              <option value="random">随机</option>
-              <option value="single">固定第一条</option>
-              <option value="round_robin">轮询</option>
+              <option value="">本地网络（直接请求）</option>
+              {draft.proxy_groups.map((group) => (
+                <option key={group.name} value={group.name}>
+                  {group.name} · {group.mode === "round_robin" ? "轮询" : "随机"}
+                </option>
+              ))}
             </select>
           </Field>
         </div>
@@ -192,9 +218,9 @@ export function CreateTaskModal({
             )}
           </div>
         )}
-        {(!isRegisterFlow || forcedCodexLogin) && (
+        {(!isRegisterFlow || forcedCodexLogin || forcedLogin) && (
           <div className="mt-3 grid gap-3 md:grid-cols-1">
-            {!forcedCodexLogin && (
+            {!forcedCodexLogin && !forcedLogin && (
               <Field label="邮箱状态筛选">
                 <select
                   className={`${styles.input} ${styles.selectInput}`}
@@ -208,10 +234,12 @@ export function CreateTaskModal({
               </Field>
             )}
             <p className="text-sm text-slate-500">
-              <span className="font-bold text-slate-800">
-                {loginCandidates.length}
-              </span>{" "}
-              {forcedCodexLogin ? "个已勾选邮箱将创建 Codex 授权登录任务" : "个邮箱将创建登录任务"}
+              <span className="font-bold text-slate-800">{loginCandidates.length}</span>{" "}
+              {forcedCodexLogin
+                ? "个已勾选邮箱将创建 Codex 授权登录任务"
+                : forcedLogin
+                  ? "个已勾选邮箱将创建普通登录任务"
+                  : "个邮箱将创建登录任务"}
             </p>
           </div>
         )}

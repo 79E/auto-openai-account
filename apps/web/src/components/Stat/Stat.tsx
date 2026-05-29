@@ -1,6 +1,6 @@
 import styles from "./Stat.module.css";
 
-export function Stat({ label, value }: { label: string; value: number }) {
+export function Stat({ label, value }: { label: string; value: number | string }) {
   return (
     <div className="rounded-xl border bg-white p-3">
       <div className="text-xs font-bold text-slate-500">{label}</div>

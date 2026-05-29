@@ -24,8 +24,13 @@ Unsupported methods return `405 Method Not Allowed`. Missing resources generally
 
 ```json
 {
-  "proxy_mode": "random",
-  "proxies": [],
+  "proxy_groups": [
+    {
+      "name": "us-residential",
+      "mode": "round_robin",
+      "proxies": ["http://127.0.0.1:8080"]
+    }
+  ],
   "password_mode": "random",
   "fixed_password": "Mima1234567890.",
   "register_concurrency": 1,
@@ -50,11 +55,17 @@ Unsupported methods return `405 Method Not Allowed`. Missing resources generally
 
 Allowed values:
 
-- `proxy_mode`: `local`, `single`, `round_robin`, `random`
+- `proxy_groups[].mode`: `random` or `round_robin`
 - `password_mode`: `random`, `fixed`
 - `imap_auth_mode`: `auto`, `password`, `xoauth2`
 - `sms_configs[].platform`: `smsbower` or `hero-sms`
 - `sms_configs[].max_price`: `0` means the API request does not send a max price limit
+
+Compatibility note:
+
+- Old databases may still contain `proxy_mode` and `proxies` internally.
+- The current settings API no longer returns those legacy fields.
+- When old data is loaded without `proxy_groups`, the server/frontend normalize it into one `默认分组` for migration.
 
 ### Mailbox
 
@@ -438,7 +449,8 @@ Request body:
 {
   "count": 1,
   "flow": "register_login",
-  "sms_config_name": ""
+  "sms_config_name": "",
+  "proxy_group_name": "us-residential"
 }
 ```
 
@@ -450,6 +462,7 @@ Allowed `flow` values:
 
 If `flow` is omitted, the server uses `register_login` for compatibility.
 `register_codex` requires `sms_config_name`; missing or unknown SMS config returns `400` before creating a job.
+Omit `proxy_group_name` or pass an empty string to use direct local network.
 
 Response: `RegisterJob`
 
@@ -528,7 +541,8 @@ Request body:
 {
   "mailbox_ids": [1, 2],
   "flow": "login",
-  "sms_config_name": ""
+  "sms_config_name": "",
+  "proxy_group_name": "us-residential"
 }
 ```
 
@@ -540,6 +554,7 @@ Allowed `flow` values:
 If `flow` is omitted, the server uses `login` for compatibility.
 Both login flows require the mailbox to have an OpenAI login password.
 `codex_login` requires `sms_config_name`; missing or unknown SMS config returns `400` before creating a job.
+Omit `proxy_group_name` or pass an empty string to use direct local network.
 
 Response status: `202 Accepted`
 

@@ -33,6 +33,7 @@ type CodexLoginInput struct {
 	Email                    string
 	Password                 string
 	Proxy                    string
+	ProxyController          ProxyController
 	SMSProvider              CodexSMSProvider
 	OTPFetcher               func(context.Context) (string, error)
 	MaxPhoneAttempts         int
@@ -53,7 +54,7 @@ func CodexLogin(ctx context.Context, input CodexLoginInput) (*CodexLoginResult, 
 		return nil, fmt.Errorf("email and password are required")
 	}
 
-	w, err := newWorkerWithOTP(input.Proxy, email, input.OTPFetcher)
+	w, err := newWorkerWithOTP(input.Proxy, email, input.OTPFetcher, input.ProxyController)
 	if err != nil {
 		return nil, err
 	}
@@ -90,7 +91,7 @@ func CodexLogin(ctx context.Context, input CodexLoginInput) (*CodexLoginResult, 
 			logStep(email, "Codex 授权登录: 普通登录预热完成，重建干净 Codex OAuth 会话")
 			w.close()
 			cleanup = false
-			w, err = newWorkerWithOTP(input.Proxy, email, input.OTPFetcher)
+			w, err = newWorkerWithOTP(input.Proxy, email, input.OTPFetcher, input.ProxyController)
 			if err != nil {
 				return nil, err
 			}

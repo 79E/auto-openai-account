@@ -67,6 +67,7 @@ function App() {
   const [mailboxDetailDraft, setMailboxDetailDraft] =
     useState<MailboxUpdate | null>(null);
   const [mailboxCodexTarget, setMailboxCodexTarget] = useState<number[] | null>(null);
+  const [mailboxLoginTarget, setMailboxLoginTarget] = useState<number[] | null>(null);
   const [tokenExportConfirm, setTokenExportConfirm] =
     useState<TokenExportConfirm>(null);
   const [themePreference, setThemePreference] =
@@ -252,13 +253,19 @@ function App() {
     count: number,
     flow = "register_login",
     smsConfigName = "",
+    proxyGroupName = "",
   ) {
     setBusy(true);
     try {
       await saveSettings(config);
       const job = await api<Job>("/api/register-jobs", {
         method: "POST",
-        body: JSON.stringify({ count, flow, sms_config_name: smsConfigName }),
+        body: JSON.stringify({
+          count,
+          flow,
+          sms_config_name: smsConfigName,
+          proxy_group_name: proxyGroupName,
+        }),
       });
       setActiveJob(job);
       setTaskOpen(false);
@@ -279,6 +286,7 @@ function App() {
     ids: number[],
     flow = "login",
     smsConfigName = "",
+    proxyGroupName = "",
   ) {
     if (ids.length === 0) return;
     setBusy(true);
@@ -286,7 +294,12 @@ function App() {
       await saveSettings(config);
       const job = await api<Job>("/api/login-jobs", {
         method: "POST",
-        body: JSON.stringify({ mailbox_ids: ids, flow, sms_config_name: smsConfigName }),
+        body: JSON.stringify({
+          mailbox_ids: ids,
+          flow,
+          sms_config_name: smsConfigName,
+          proxy_group_name: proxyGroupName,
+        }),
       });
       setActiveJob(job);
       setTaskOpen(false);
@@ -305,7 +318,15 @@ function App() {
 
   function openCodexLoginTask(ids: number[]) {
     if (!settingsDraft || ids.length === 0) return;
+    setMailboxLoginTarget(null);
     setMailboxCodexTarget(ids);
+    setTaskOpen(true);
+  }
+
+  function openLoginTask(ids: number[]) {
+    if (!settingsDraft || ids.length === 0) return;
+    setMailboxCodexTarget(null);
+    setMailboxLoginTarget(ids);
     setTaskOpen(true);
   }
 
@@ -477,6 +498,11 @@ function App() {
   const newCount = stats.mailboxes.new || 0;
   const runningCount = stats.mailboxes.registering || 0;
   const loginingCount = stats.mailboxes.logining || 0;
+  const proxyGroupCount = settings?.proxy_groups?.length || 0;
+  const proxyTotalCount = settings?.proxy_groups?.reduce(
+    (sum, group) => sum + (group.proxies?.length || 0),
+    0,
+  ) || 0;
 
   return (
     <div className="theme-shell min-h-screen text-slate-950">
@@ -520,9 +546,11 @@ function App() {
             mailboxes={mailboxes}
             busy={busy}
             codexLoginTargetIds={mailboxCodexTarget || undefined}
+            loginTargetIds={mailboxLoginTarget || undefined}
             onClose={() => {
               setTaskOpen(false);
               setMailboxCodexTarget(null);
+              setMailboxLoginTarget(null);
             }}
             onCreateRegister={createRegisterTask}
             onCreateLogin={createLoginTask}
@@ -559,7 +587,8 @@ function App() {
                   loginingCount,
                   registered,
                   abnormal,
-                  proxyCount: settings?.proxies?.length || 0,
+                  proxyCountLabel: `${proxyTotalCount}`,
+                  // proxyCountLabel: `${proxyGroupCount}组/${proxyTotalCount}条代理`,
                 }}
                 mailboxes={mailboxes}
                 logs={latestLogs}
@@ -582,9 +611,7 @@ function App() {
                 openMailboxDetail={openMailboxDetail}
                 deleteMailboxes={deleteMailboxes}
                 resetMailboxes={resetMailboxes}
-                startLoginJob={(ids) =>
-                  settingsDraft && createLoginTask(settingsDraft, ids)
-                }
+                startLoginJob={openLoginTask}
                 startCodexLoginJob={openCodexLoginTask}
                 busy={busy}
               />

@@ -41,11 +41,16 @@ The product UI should follow `docs/design.md`.
 
 Settings must support multiple proxies.
 
-- `proxy_mode`: `random`, `round_robin`, or `single`.
-- `proxies`: list of proxy URLs.
+- `proxy_groups`: grouped proxy pools with unique group names.
+- Each group has `mode`: `random` or `round_robin`.
+- Each group has `proxies`: list of proxy URLs.
 - Supported schemes: `http`, `https`, `socks5`, `socks5h`.
-- Default strategy: `random`.
-- Each mailbox execution should select a proxy according to the strategy.
+- Task creation must allow choosing direct local network or one proxy group.
+- Local network starts directly without proxy pre-check.
+- Proxy group execution must pre-test candidate proxies before starting mailbox work.
+- `random` group mode picks one working proxy; mailbox fails immediately if that proxy later fails.
+- `round_robin` group mode should move to the next proxy only when the current request fails because of the proxy, and retry that same step instead of restarting the whole mailbox flow.
+- Once a mailbox task has passed its first proxy-validated step, the rest of that mailbox flow should stay on the selected proxy unless the proxy itself fails.
 
 ## Runtime Log Requirements
 

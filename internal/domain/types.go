@@ -1,5 +1,10 @@
 package domain
 
+import (
+	"fmt"
+	"strings"
+)
+
 const (
 	MailboxStatusNew         = "new"
 	MailboxStatusRegistering = "registering"
@@ -30,9 +35,16 @@ type SMSConfig struct {
 	MaxPrice  float64 `json:"max_price"`
 }
 
+type ProxyGroup struct {
+	Name    string   `json:"name"`
+	Mode    string   `json:"mode"`
+	Proxies []string `json:"proxies"`
+}
+
 type Settings struct {
 	ProxyMode              string      `json:"proxy_mode"`
 	Proxies                []string    `json:"proxies"`
+	ProxyGroups            []ProxyGroup `json:"proxy_groups"`
 	PasswordMode           string      `json:"password_mode"`
 	FixedPassword          string      `json:"fixed_password"`
 	RegisterConcurrency    int         `json:"register_concurrency"`
@@ -134,8 +146,12 @@ func DefaultSettings() Settings {
 }
 
 func NormalizeSettings(s Settings) Settings {
+	s.Proxies = normalizeProxyList(s.Proxies)
 	if s.Proxies == nil {
 		s.Proxies = []string{}
+	}
+	if s.ProxyGroups == nil {
+		s.ProxyGroups = []ProxyGroup{}
 	}
 	if s.SMSConfigs == nil {
 		s.SMSConfigs = []SMSConfig{}
@@ -143,6 +159,24 @@ func NormalizeSettings(s Settings) Settings {
 	if s.ProxyMode != "local" && s.ProxyMode != "single" && s.ProxyMode != "round_robin" {
 		s.ProxyMode = "random"
 	}
+	normalizedGroups := make([]ProxyGroup, 0, len(s.ProxyGroups))
+	for _, group := range s.ProxyGroups {
+		group.Name = strings.TrimSpace(group.Name)
+		group.Mode = normalizeProxyGroupMode(group.Mode)
+		group.Proxies = normalizeProxyList(group.Proxies)
+		if group.Name == "" || len(group.Proxies) == 0 {
+			continue
+		}
+		normalizedGroups = append(normalizedGroups, group)
+	}
+	if len(normalizedGroups) == 0 && len(s.Proxies) > 0 {
+		mode := "random"
+		if s.ProxyMode == "round_robin" {
+			mode = "round_robin"
+		}
+		normalizedGroups = []ProxyGroup{{Name: "默认分组", Mode: mode, Proxies: append([]string(nil), s.Proxies...)}}
+	}
+	s.ProxyGroups = normalizedGroups
 	if s.PasswordMode != "fixed" {
 		s.PasswordMode = "random"
 	}
@@ -182,6 +216,61 @@ func NormalizeSettings(s Settings) Settings {
 		}
 	}
 	return s
+}
+
+func ValidateSettings(s Settings) error {
+	s = NormalizeSettings(s)
+	seen := map[string]string{}
+	for _, group := range s.ProxyGroups {
+		name := strings.TrimSpace(group.Name)
+		if name == "" {
+			return fmt.Errorf("proxy group name is required")
+		}
+		if len(group.Proxies) == 0 {
+			return fmt.Errorf("proxy group %q must contain at least one proxy", name)
+		}
+		key := strings.ToLower(name)
+		if existing, ok := seen[key]; ok {
+			return fmt.Errorf("proxy group %q already exists", existing)
+		}
+		seen[key] = name
+	}
+	return nil
+}
+
+func FindProxyGroup(groups []ProxyGroup, name string) (ProxyGroup, bool) {
+	target := strings.TrimSpace(name)
+	if target == "" {
+		return ProxyGroup{}, false
+	}
+	for _, group := range groups {
+		if strings.EqualFold(strings.TrimSpace(group.Name), target) {
+			return group, true
+		}
+	}
+	return ProxyGroup{}, false
+}
+
+func normalizeProxyGroupMode(mode string) string {
+	if strings.TrimSpace(mode) == "round_robin" {
+		return "round_robin"
+	}
+	return "random"
+}
+
+func normalizeProxyList(values []string) []string {
+	if values == nil {
+		return []string{}
+	}
+	result := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		result = append(result, value)
+	}
+	return result
 }
 
 func MailboxStatusText(status string) string {

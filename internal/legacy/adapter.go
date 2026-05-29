@@ -27,12 +27,13 @@ func MailboxFromDomain(item domain.Mailbox) Mailbox {
 }
 
 func MailboxCanFetchEmailOTP(item domain.Mailbox, settings domain.Settings) bool {
-	return MailboxFromDomain(item).CanFetchEmailOTP(SettingsFromDomain(settings, ""))
+	return MailboxFromDomain(item).CanFetchEmailOTP(SettingsFromDomain(settings, "", nil))
 }
 
-func SettingsFromDomain(settings domain.Settings, proxy string) Settings {
+func SettingsFromDomain(settings domain.Settings, proxy string, controller ProxyController) Settings {
 	return Settings{
 		Proxy:                  proxy,
+		ProxyController:        controller,
 		PasswordMode:           settings.PasswordMode,
 		FixedPassword:          settings.FixedPassword,
 		RegisterConcurrency:    settings.RegisterConcurrency,

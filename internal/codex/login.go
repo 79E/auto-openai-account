@@ -40,6 +40,7 @@ type LoginOptions struct {
 	Email                    string
 	Password                 string
 	Proxy                    string
+	ProxyController          legacy.ProxyController
 	SMSProvider              SMSProvider
 	OTPFetcher               func(context.Context) (string, error)
 	ProgressChan             chan<- LoginProgress
@@ -59,6 +60,7 @@ func LoginWithCodex(ctx context.Context, opts LoginOptions) (*LoginResult, error
 		Email:                    opts.Email,
 		Password:                 opts.Password,
 		Proxy:                    opts.Proxy,
+		ProxyController:          opts.ProxyController,
 		SMSProvider:              opts.SMSProvider,
 		OTPFetcher:               opts.OTPFetcher,
 		MaxPhoneAttempts:         opts.MaxPhoneAttempts,

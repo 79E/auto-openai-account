@@ -14,16 +14,22 @@ const (
 )
 
 type Settings struct {
-	Proxy                  string `json:"proxy"`
-	PasswordMode           string `json:"password_mode"`
-	FixedPassword          string `json:"fixed_password"`
-	RegisterConcurrency    int    `json:"register_concurrency"`
-	OTPTimeoutSeconds      int    `json:"otp_timeout_seconds"`
-	OTPPollIntervalSeconds int    `json:"otp_poll_interval_seconds"`
-	IMAPHost               string `json:"imap_host"`
-	IMAPPort               int    `json:"imap_port"`
-	IMAPAuthMode           string `json:"imap_auth_mode"`
-	Listen                 string `json:"listen"`
+	Proxy                  string          `json:"proxy"`
+	ProxyController        ProxyController `json:"-"`
+	PasswordMode           string          `json:"password_mode"`
+	FixedPassword          string          `json:"fixed_password"`
+	RegisterConcurrency    int             `json:"register_concurrency"`
+	OTPTimeoutSeconds      int             `json:"otp_timeout_seconds"`
+	OTPPollIntervalSeconds int             `json:"otp_poll_interval_seconds"`
+	IMAPHost               string          `json:"imap_host"`
+	IMAPPort               int             `json:"imap_port"`
+	IMAPAuthMode           string          `json:"imap_auth_mode"`
+	Listen                 string          `json:"listen"`
+}
+
+type ProxyController interface {
+	CurrentProxy() string
+	HandleRequestFailure(target string, err error) (string, bool)
 }
 
 type Mailbox struct {

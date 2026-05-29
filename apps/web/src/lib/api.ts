@@ -1,6 +1,11 @@
 import { defaultPassword } from "./constants";
 import type { SMSCatalog, SettingsPayload } from "../types";
 
+type RawSettingsPayload = Partial<SettingsPayload> & {
+  proxy_mode?: string;
+  proxies?: string[];
+};
+
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, {
     headers: { "Content-Type": "application/json" },
@@ -13,10 +18,37 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json();
 }
 
-export function normalizeSettingsPayload(settings: SettingsPayload): SettingsPayload {
+export function normalizeSettingsPayload(settings: RawSettingsPayload): SettingsPayload {
+  const proxies = Array.isArray(settings.proxies)
+    ? settings.proxies.filter(Boolean)
+    : [];
+  const proxyGroups = Array.isArray(settings.proxy_groups)
+    ? settings.proxy_groups
+        .map((group) => ({
+          name: group?.name || "",
+          mode: group?.mode === "round_robin" ? "round_robin" : "random",
+          proxies: Array.isArray(group?.proxies)
+            ? group.proxies.filter(Boolean)
+            : [],
+        }))
+        .filter((group) => group.name.trim() && group.proxies.length > 0)
+    : [];
   return {
-    ...settings,
-    proxies: Array.isArray(settings.proxies) ? settings.proxies : [],
+    proxy_groups:
+      proxyGroups.length > 0
+        ? proxyGroups
+        : proxies.length > 0
+          ? [{ name: "默认分组", mode: settings.proxy_mode === "round_robin" ? "round_robin" : "random", proxies }]
+          : [],
+    register_concurrency: Number(settings.register_concurrency) || 1,
+    password_mode: settings.password_mode || "random",
+    fixed_password: settings.fixed_password || defaultPassword,
+    imap_host: settings.imap_host || "outlook.office365.com",
+    imap_port: Number(settings.imap_port) || 993,
+    imap_auth_mode: settings.imap_auth_mode || "auto",
+    otp_timeout_seconds: Number(settings.otp_timeout_seconds) || 180,
+    otp_poll_interval_seconds: Number(settings.otp_poll_interval_seconds) || 5,
+    listen: settings.listen || ":8080",
     sms_configs: Array.isArray(settings.sms_configs)
       ? settings.sms_configs.map((config) => ({
           name: config.name || "",
@@ -27,7 +59,6 @@ export function normalizeSettingsPayload(settings: SettingsPayload): SettingsPay
           max_price: Number(config.max_price) || 0,
         }))
       : [],
-    fixed_password: settings.fixed_password || defaultPassword,
   };
 }
 

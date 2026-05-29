@@ -109,7 +109,7 @@ func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
 			writeError(w, 500, err)
 			return
 		}
-		writeJSON(w, 200, settings)
+		writeJSON(w, 200, publicSettings(settings))
 	case http.MethodPut, http.MethodPost:
 		var settings domain.Settings
 		if err := json.NewDecoder(r.Body).Decode(&settings); err != nil {
@@ -121,9 +121,26 @@ func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		settings, _ = s.store.LoadSettings()
-		writeJSON(w, 200, map[string]any{"ok": true, "settings": settings})
+		writeJSON(w, 200, map[string]any{"ok": true, "settings": publicSettings(settings)})
 	default:
 		w.WriteHeader(http.StatusMethodNotAllowed)
+	}
+}
+
+func publicSettings(settings domain.Settings) map[string]any {
+	settings = domain.NormalizeSettings(settings)
+	return map[string]any{
+		"proxy_groups": settings.ProxyGroups,
+		"password_mode": settings.PasswordMode,
+		"fixed_password": settings.FixedPassword,
+		"register_concurrency": settings.RegisterConcurrency,
+		"otp_timeout_seconds": settings.OTPTimeoutSeconds,
+		"otp_poll_interval_seconds": settings.OTPPollIntervalSeconds,
+		"imap_host": settings.IMAPHost,
+		"imap_port": settings.IMAPPort,
+		"imap_auth_mode": settings.IMAPAuthMode,
+		"listen": settings.Listen,
+		"sms_configs": settings.SMSConfigs,
 	}
 }
 
@@ -257,7 +274,7 @@ func (s *Server) handleMailboxLogin(w http.ResponseWriter, r *http.Request, id i
 		writeError(w, http.StatusNotFound, fmt.Errorf("mailbox not found"))
 		return
 	}
-	job, err := s.runner.StartLogin([]int64{mailbox.ID}, "", "")
+	job, err := s.runner.StartLogin([]int64{mailbox.ID}, "", "", "")
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err)
 		return
@@ -274,12 +291,13 @@ func (s *Server) handleLoginJobs(w http.ResponseWriter, r *http.Request) {
 		MailboxIDs    []int64 `json:"mailbox_ids"`
 		Flow          string  `json:"flow"`
 		SMSConfigName string  `json:"sms_config_name"`
+		ProxyGroupName string `json:"proxy_group_name"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid json body"))
 		return
 	}
-	job, err := s.runner.StartLogin(body.MailboxIDs, body.Flow, body.SMSConfigName)
+	job, err := s.runner.StartLogin(body.MailboxIDs, body.Flow, body.SMSConfigName, body.ProxyGroupName)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err)
 		return
@@ -304,12 +322,13 @@ func (s *Server) handleRegisterJobs(w http.ResponseWriter, r *http.Request) {
 			Count         int    `json:"count"`
 			Flow          string `json:"flow"`
 			SMSConfigName string `json:"sms_config_name"`
+			ProxyGroupName string `json:"proxy_group_name"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			writeError(w, 400, fmt.Errorf("invalid json body"))
 			return
 		}
-		job, err := s.runner.Start(body.Count, body.Flow, body.SMSConfigName)
+		job, err := s.runner.Start(body.Count, body.Flow, body.SMSConfigName, body.ProxyGroupName)
 		if err != nil {
 			writeError(w, 400, err)
 			return

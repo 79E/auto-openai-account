@@ -21,7 +21,7 @@ export function Overview({
     loginingCount: number;
     registered: number;
     abnormal: number;
-    proxyCount: number;
+    proxyCountLabel: string;
   };
   mailboxes: Mailbox[];
   logs: RuntimeLog[];
@@ -43,7 +43,7 @@ export function Overview({
     <div className="flex min-h-0 flex-col lg:h-[calc(100vh-5.75rem)]">
       <section className="mb-4 shrink-0 grid gap-4 lg:grid-cols-2">
         <div className="grid grid-cols-2 gap-2 rounded-2xl border border-slate-200/70 bg-white/80 p-3 shadow-soft backdrop-blur sm:grid-cols-3">
-          <Stat label="代理池" value={stats.proxyCount} />
+          <Stat label="代理池" value={stats.proxyCountLabel} />
           <Stat label="未使用" value={stats.newCount} />
           <Stat label="注册中" value={stats.runningCount} />
           <Stat label="登陆中" value={stats.loginingCount} />

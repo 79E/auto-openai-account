@@ -35,7 +35,6 @@ export function MailboxesPage({
 }) {
   const [selected, setSelected] = useState<number[]>([]);
   const [importOpen, setImportOpen] = useState(false);
-  const [loginConfirm, setLoginConfirm] = useState<number[] | null>(null);
   const [view, setView] = useState<MailboxView>("all");
   const [page, setPage] = useState(1);
   const counts = mailboxes.reduce<Record<string, number>>((a, m) => {
@@ -81,13 +80,6 @@ export function MailboxesPage({
     await importMailboxes();
     setImportOpen(false);
   }
-  async function confirmLogin() {
-    if (loginConfirm && loginConfirm.length) {
-      await startLoginJob(loginConfirm);
-      setLoginConfirm(null);
-      setSelected([]);
-    }
-  }
   async function confirmDelete() {
     if (
       selected.length &&
@@ -128,7 +120,7 @@ export function MailboxesPage({
             <button
               onClick={() => {
                 if (selected.length === 0) return;
-                setLoginConfirm(selected);
+                startLoginJob(selected);
               }}
               disabled={busy || selected.length === 0}
               className="rounded-xl border bg-white px-3 py-2 font-bold disabled:opacity-50"
@@ -232,7 +224,7 @@ export function MailboxesPage({
                     详情
                   </button>
                   <button
-                    onClick={() => setLoginConfirm([m.id])}
+                    onClick={() => startLoginJob([m.id])}
                     className="rounded-xl border bg-white px-3 py-2 text-xs font-bold"
                   >
                     登录
@@ -323,7 +315,7 @@ export function MailboxesPage({
             value={importText}
             onChange={(e) => setImportText(e.target.value)}
             placeholder="email@example.com----password----client_id----refresh_token"
-            className="h-60 w-full rounded-xl border bg-white p-3 font-mono text-sm outline-none focus:ring-2 focus:ring-blue-500"
+            className="h-60 w-full rounded-xl border border-slate-200 bg-white p-3 font-mono text-sm outline-none transition focus:border-blue-500"
           />
           <div className="mt-4 flex justify-end gap-2">
             <button
@@ -338,32 +330,6 @@ export function MailboxesPage({
               className="rounded-xl bg-slate-950 px-3 py-2 font-bold text-white disabled:opacity-50"
             >
               确认导入
-            </button>
-          </div>
-        </Modal>
-      )}
-      {loginConfirm && (
-        <Modal
-          title="确认普通登录"
-          subtitle="普通登录任务会立即启动，确定要执行吗？"
-          onClose={() => setLoginConfirm(null)}
-        >
-          <p className="text-sm text-slate-500">
-            将为 {loginConfirm.length} 个邮箱启动普通登录任务。
-          </p>
-          <div className="mt-4 flex justify-end gap-2">
-            <button
-              onClick={() => setLoginConfirm(null)}
-              className="rounded-xl border bg-white px-3 py-2 font-bold"
-            >
-              取消
-            </button>
-            <button
-              onClick={confirmLogin}
-              disabled={busy}
-              className="rounded-xl bg-slate-950 px-3 py-2 font-bold text-white disabled:opacity-50"
-            >
-              确认登录
             </button>
           </div>
         </Modal>

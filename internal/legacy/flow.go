@@ -10,6 +10,7 @@ import (
 type RegisterInput struct {
 	Mailbox        Mailbox
 	Settings       Settings
+	ProxyController ProxyController
 	RegisterPass   string
 	OTPFetcher     func(context.Context) (string, error)
 	SkipTokenLogin bool
@@ -33,7 +34,7 @@ func RegisterOne(ctx context.Context, input RegisterInput) (*RegisterResult, err
 	if password == "" {
 		password = passwordForSettings(input.Settings)
 	}
-	w, err := newWorkerWithOTP(input.Settings.Proxy, email, input.OTPFetcher)
+	w, err := newWorkerWithOTP(input.Settings.Proxy, email, input.OTPFetcher, input.ProxyController)
 	if err != nil {
 		return nil, err
 	}
@@ -89,14 +90,14 @@ func RegisterOne(ctx context.Context, input RegisterInput) (*RegisterResult, err
 	return result, nil
 }
 
-func LoginOne(ctx context.Context, mailbox Mailbox, settings Settings, otpFetcher func(context.Context) (string, error)) (map[string]any, error) {
+func LoginOne(ctx context.Context, mailbox Mailbox, settings Settings, otpFetcher func(context.Context) (string, error), controller ProxyController) (map[string]any, error) {
 	email := Clean(mailbox.Email)
 	logStep(email, "登录换 token 流程开始")
 	password := firstNonEmpty(Clean(mailbox.RegisterPassword), Clean(mailbox.Password))
 	if email == "" || password == "" {
 		return nil, fmt.Errorf("email and password are required")
 	}
-	w, err := newWorkerWithOTP(settings.Proxy, email, otpFetcher)
+	w, err := newWorkerWithOTP(settings.Proxy, email, otpFetcher, controller)
 	if err != nil {
 		return nil, err
 	}
