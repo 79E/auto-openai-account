@@ -30,7 +30,8 @@ body {
   background-color: rgb(15 23 42 / 0.86) !important;
 }
 
-[data-theme="dark"] [class~="bg-slate-50"] {
+[data-theme="dark"] [class~="bg-slate-50"],
+[data-theme="dark"] [class~="bg-slate-50/70"] {
   background-color: rgb(15 23 42 / 0.72) !important;
 }
 

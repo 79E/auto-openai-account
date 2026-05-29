@@ -102,27 +102,29 @@ export function CreateTaskModal({
           </div>
           <button
             onClick={onClose}
-            className="rounded-full border px-3 py-1 text-slate-500"
+            className="self-start pt-0.5 text-slate-400 hover:text-slate-600"
           >
-            关闭
+            ✕
           </button>
         </div>
-        <div className="mb-3 flex flex-wrap gap-2">
-          {flowOptions.map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              onClick={() => setFlow(option.value)}
-              className={
-                flow === option.value
-                  ? "rounded-xl bg-slate-950 px-3 py-1.5 font-bold text-white"
-                  : "rounded-xl border bg-white px-3 py-1.5 font-bold"
-              }
-            >
-              {option.label}
-            </button>
-          ))}
-        </div>
+        {!forcedCodexLogin && (
+          <div className="mb-3 flex flex-wrap gap-2">
+            {flowOptions.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => setFlow(option.value)}
+                className={
+                  flow === option.value
+                    ? "rounded-xl bg-slate-950 px-3 py-1.5 font-bold text-white"
+                    : "rounded-xl border bg-white px-3 py-1.5 font-bold"
+                }
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+        )}
         <div className="grid gap-3 md:grid-cols-2">
           <Field label="并发数量">
             <input

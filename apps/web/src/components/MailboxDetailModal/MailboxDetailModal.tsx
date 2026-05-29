@@ -31,6 +31,25 @@ export function MailboxDetailModal({
       title="邮箱详情"
       subtitle={detailDraft.email || detail.email}
       onClose={onClose}
+      footer={
+        <div className="flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-xl border bg-white px-3 py-2 font-bold"
+          >
+            取消
+          </button>
+          <button
+            type="button"
+            onClick={onSave}
+            disabled={busy || !detailDraft.email.trim()}
+            className="rounded-xl bg-slate-950 px-3 py-2 font-bold text-white disabled:opacity-50"
+          >
+            保存
+          </button>
+        </div>
+      }
     >
       <div className="space-y-3 text-sm">
         <Field label="OpenAI 密码">
@@ -86,23 +105,6 @@ export function MailboxDetailModal({
               placeholder="email@example.com----password----client_id----refresh_token"
             />
           )}
-        </div>
-        <div className="flex justify-end gap-2 pt-2">
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-xl border bg-white px-3 py-2 font-bold"
-          >
-            取消
-          </button>
-          <button
-            type="button"
-            onClick={onSave}
-            disabled={busy || !detailDraft.email.trim()}
-            className="rounded-xl bg-slate-950 px-3 py-2 font-bold text-white disabled:opacity-50"
-          >
-            保存
-          </button>
         </div>
       </div>
     </Modal>

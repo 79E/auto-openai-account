@@ -62,6 +62,7 @@ function App() {
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState<ToastState>(null);
   const [taskOpen, setTaskOpen] = useState(false);
+  const [credentialsOpen, setCredentialsOpen] = useState(false);
   const [mailboxDetail, setMailboxDetail] = useState<Mailbox | null>(null);
   const [mailboxDetailDraft, setMailboxDetailDraft] =
     useState<MailboxUpdate | null>(null);

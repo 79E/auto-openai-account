@@ -6,16 +6,18 @@ export function Modal({
   subtitle,
   onClose,
   children,
+  footer,
 }: {
   title: string;
   subtitle?: string;
   onClose: () => void;
   children: ReactNode;
+  footer?: ReactNode;
 }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-3 backdrop-blur-sm">
-      <div className="w-full max-w-2xl rounded-2xl border bg-white p-4 shadow-soft">
-        <div className="mb-3 flex items-center justify-between">
+      <div className="flex max-h-[calc(100vh-3rem)] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border bg-white p-4 shadow-soft">
+        <div className="mb-3 flex shrink-0 items-center justify-between">
           <div className="min-w-0">
             <h2 className="text-lg font-black">{title}</h2>
             {subtitle && (
@@ -24,14 +26,15 @@ export function Modal({
               </p>
             )}
           </div>
-          <button
-            onClick={onClose}
-            className="rounded-full border px-3 py-1 text-slate-500"
-          >
-            关闭
-          </button>
+            <button
+              onClick={onClose}
+              className="self-start pt-0.5 text-slate-400 hover:text-slate-600"
+            >
+              ✕
+            </button>
         </div>
-        {children}
+        <div className="overflow-y-auto">{children}</div>
+        {footer && <div className="shrink-0 pt-3">{footer}</div>}
       </div>
     </div>
   );
