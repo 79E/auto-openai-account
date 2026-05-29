@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"time"
 
@@ -96,7 +97,13 @@ func (s *Store) LoadSettings() (domain.Settings, error) {
 	}
 	data, _ := json.Marshal(values)
 	_ = json.Unmarshal(data, &settings)
-	return domain.NormalizeSettings(settings), rows.Err()
+	normalized := domain.NormalizeSettings(settings)
+	if values["proxy_mode"] != nil || values["proxies"] != nil || !reflect.DeepEqual(settings, normalized) {
+		if err := s.SaveSettings(normalized); err != nil {
+			return normalized, err
+		}
+	}
+	return normalized, rows.Err()
 }
 
 func (s *Store) SaveSettings(settings domain.Settings) error {

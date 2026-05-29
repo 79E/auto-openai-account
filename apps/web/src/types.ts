@@ -68,6 +68,7 @@ export type RuntimeLog = {
 };
 
 export type SMSConfig = {
+  id: string;
   name: string;
   platform: string;
   api_key: string;
@@ -96,6 +97,7 @@ export type SMSCatalog = {
 };
 
 export type ProxyGroup = {
+  id: string;
   name: string;
   mode: string;
   proxies: string[];

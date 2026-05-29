@@ -15,7 +15,7 @@ import { Badge } from "../../components/Badge/Badge";
 import { Card } from "../../components/Card/Card";
 import { EmptyState } from "../../components/EmptyState/EmptyState";
 import { Modal } from "../../components/Modal/Modal";
-import { fetchSMSCatalog } from "../../lib/api";
+import { createSettingsItemID, fetchSMSCatalog } from "../../lib/api";
 import type {
   SMSCatalog,
   SMSCatalogCountry,
@@ -42,6 +42,7 @@ function nextConfigName(configs: SMSConfig[]) {
 
 function emptySMSConfig(configs: SMSConfig[]): SMSConfigForm {
   return {
+    id: createSettingsItemID(),
     name: nextConfigName(configs),
     platform: "smsbower",
     api_key: "",
@@ -53,6 +54,7 @@ function emptySMSConfig(configs: SMSConfig[]): SMSConfigForm {
 
 function normalizeSMSConfig(config: SMSConfigForm): SMSConfig {
   return {
+    id: config.id || createSettingsItemID(),
     name: config.name.trim(),
     platform: config.platform || "smsbower",
     api_key: config.api_key.trim(),
@@ -117,7 +119,7 @@ export function SmsSettingsPage({
 }) {
   const smsConfigs = settingsDraft.sms_configs || [];
   const [form, setForm] = useState<SMSConfigForm>(() => emptySMSConfig(smsConfigs));
-  const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const [editingConfigID, setEditingConfigID] = useState<string | null>(null);
   const [formError, setFormError] = useState("");
   const [saving, setSaving] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
@@ -127,7 +129,7 @@ export function SmsSettingsPage({
   const inputClass =
     "mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-blue-500";
   const selectClass = `${inputClass} appearance-none pr-10`;
-  const isEditing = editingIndex !== null;
+  const isEditing = editingConfigID !== null;
   const submitText = isEditing ? "保存配置" : "添加配置";
 
   const configNames = useMemo(
@@ -171,13 +173,13 @@ export function SmsSettingsPage({
 
   function resetForm(nextConfigs = smsConfigs) {
     setForm(emptySMSConfig(nextConfigs));
-    setEditingIndex(null);
+    setEditingConfigID(null);
     setFormError("");
   }
 
   function openCreateForm() {
     setForm(emptySMSConfig(smsConfigs));
-    setEditingIndex(null);
+    setEditingConfigID(null);
     setFormError("");
     setCatalog(null);
     setCatalogError("");
@@ -209,8 +211,8 @@ export function SmsSettingsPage({
       return "最高价格不能小于 0";
     }
     const duplicate = configNames.some((name, index) => {
-      if (editingIndex !== null && index === editingIndex) return false;
-      return name === normalized.name;
+      if (smsConfigs[index]?.id === editingConfigID) return false;
+      return name.toLowerCase() === normalized.name.toLowerCase();
     });
     if (duplicate) return "配置名称不能重复";
     return "";
@@ -230,10 +232,10 @@ export function SmsSettingsPage({
     }
     const normalized = normalizeSMSConfig(form);
     const nextConfigs =
-      editingIndex === null
+      editingConfigID === null
         ? [...smsConfigs, normalized]
-        : smsConfigs.map((config, index) =>
-            index === editingIndex ? normalized : config,
+        : smsConfigs.map((config) =>
+            config.id === editingConfigID ? normalized : config,
           );
     setSaving(true);
     try {
@@ -245,24 +247,22 @@ export function SmsSettingsPage({
     }
   }
 
-  async function removeConfig(index: number) {
-    const nextConfigs = smsConfigs.filter((_, currentIndex) => currentIndex !== index);
+  async function removeConfig(id: string) {
+    const nextConfigs = smsConfigs.filter((config) => config.id !== id);
     setSaving(true);
     try {
       await persist(nextConfigs);
-      if (editingIndex === index) {
+      if (editingConfigID === id) {
         resetForm(nextConfigs);
-      } else if (editingIndex !== null && index < editingIndex) {
-        setEditingIndex(editingIndex - 1);
       }
     } finally {
       setSaving(false);
     }
   }
 
-  function startEdit(index: number) {
-    setEditingIndex(index);
-    setForm(toFormSMSConfig(smsConfigs[index]));
+  function startEdit(config: SMSConfig) {
+    setEditingConfigID(config.id);
+    setForm(toFormSMSConfig(config));
     setFormError("");
     setCatalog(null);
     setCatalogError("");
@@ -317,7 +317,7 @@ export function SmsSettingsPage({
           )}
           {smsConfigs.map((config, index) => (
             <div
-              key={`${config.name}-${index}`}
+              key={config.id}
               className="flex h-full flex-col rounded-2xl border border-slate-200/80 bg-slate-50/70 p-4 shadow-sm transition hover:border-blue-200 hover:bg-white/80"
             >
               <div className="flex h-full flex-col gap-4">
@@ -329,7 +329,7 @@ export function SmsSettingsPage({
                     <span className="rounded-full bg-emerald-100 px-3 py-1 text-sm font-black text-emerald-700">
                       {platformLabel(config.platform)}
                     </span>
-                    {editingIndex === index && (
+                    {editingConfigID === config.id && (
                       <Badge status="running" text="编辑中" />
                     )}
                   </div>
@@ -347,7 +347,7 @@ export function SmsSettingsPage({
                 <div className="flex shrink-0 flex-wrap justify-end gap-2">
                   <button
                     type="button"
-                    onClick={() => startEdit(index)}
+                    onClick={() => startEdit(config)}
                     className="inline-flex h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-black shadow-sm"
                   >
                     <Pencil size={16} />
@@ -356,7 +356,7 @@ export function SmsSettingsPage({
                   <button
                     type="button"
                     disabled={busy || saving}
-                    onClick={() => removeConfig(index)}
+                    onClick={() => removeConfig(config.id)}
                     className="inline-flex h-11 items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-4 text-sm font-black text-rose-700 shadow-sm disabled:opacity-50"
                   >
                     <Trash2 size={16} />

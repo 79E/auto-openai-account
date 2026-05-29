@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { PlugZap } from "lucide-react";
-import { api } from "../../lib/api";
+import { api, createSettingsItemID } from "../../lib/api";
 import { isValidProxyURL } from "../../lib/format";
 import type { ProxyGroup, ProxyTestResult, SettingsPayload } from "../../types";
 import { Badge } from "../../components/Badge/Badge";
@@ -37,7 +37,7 @@ export function ProxyPoolPage({
   const [testing, setTesting] = useState<string[]>([]);
   const [addOpen, setAddOpen] = useState(false);
   const [addDraft, setAddDraft] = useState<AddDraft>(initialAddDraft);
-  const [editingGroupName, setEditingGroupName] = useState<string | null>(null);
+  const [editingGroupID, setEditingGroupID] = useState<string | null>(null);
 
   const groups = settingsDraft.proxy_groups || [];
 
@@ -52,17 +52,17 @@ export function ProxyPoolPage({
 
   function resetAddDraft() {
     setAddDraft(initialAddDraft);
-    setEditingGroupName(null);
+    setEditingGroupID(null);
   }
 
-  function removeGroup(name: string) {
-    persist(groups.filter((group) => group.name !== name));
+  function removeGroup(id: string) {
+    persist(groups.filter((group) => group.id !== id));
   }
 
-  function removeProxy(groupName: string, proxy: string) {
+  function removeProxy(groupID: string, proxy: string) {
     const nextGroups = groups
       .map((group) =>
-        group.name !== groupName
+        group.id !== groupID
           ? group
           : {
               ...group,
@@ -79,7 +79,7 @@ export function ProxyPoolPage({
   }
 
   function openEditModal(group: ProxyGroup) {
-    setEditingGroupName(group.name);
+    setEditingGroupID(group.id);
     setAddDraft({
       name: group.name,
       mode: group.mode === "random" ? "random" : "round_robin",
@@ -98,7 +98,7 @@ export function ProxyPoolPage({
       groups.some(
         (group) =>
           group.name.trim().toLowerCase() === name.toLowerCase() &&
-          group.name !== editingGroupName,
+          group.id !== editingGroupID,
       )
     ) {
       showToast(`分组名已存在：${name}`, "error");
@@ -122,14 +122,15 @@ export function ProxyPoolPage({
       return;
     }
     const nextGroup = {
+      id: editingGroupID || createSettingsItemID(),
       name,
       mode: addDraft.mode,
       proxies,
     };
-    if (editingGroupName) {
+    if (editingGroupID) {
       persist(
         groups.map((group) =>
-          group.name === editingGroupName ? nextGroup : group,
+          group.id === editingGroupID ? nextGroup : group,
         ),
       );
     } else {
@@ -188,7 +189,7 @@ export function ProxyPoolPage({
           {groups.map((group) => {
             const groupBusy = group.proxies.some((proxy) => testing.includes(proxy));
             return (
-              <div key={group.name} className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
+              <div key={group.id} className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <div className="flex flex-wrap items-center gap-2">
@@ -215,7 +216,7 @@ export function ProxyPoolPage({
                       {groupBusy ? "测试中..." : "测试全部"}
                     </button>
                     <button
-                      onClick={() => removeGroup(group.name)}
+                      onClick={() => removeGroup(group.id)}
                       className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-bold text-rose-700"
                     >
                       删除分组
@@ -227,7 +228,7 @@ export function ProxyPoolPage({
                     const result = results[proxy];
                     const isTesting = testing.includes(proxy);
                     return (
-                      <div key={`${group.name}-${proxy}`} className="rounded-xl border border-slate-200 bg-white p-3">
+                      <div key={`${group.id}-${proxy}`} className="rounded-xl border border-slate-200 bg-white p-3">
                         <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
                           <div className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 font-mono text-sm text-slate-800">
                             <div className="truncate">{proxy}</div>
@@ -240,7 +241,7 @@ export function ProxyPoolPage({
                             {isTesting ? "测试中..." : "测速"}
                           </button>
                           <button
-                            onClick={() => removeProxy(group.name, proxy)}
+                            onClick={() => removeProxy(group.id, proxy)}
                             className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-bold text-rose-700"
                           >
                             删除
@@ -278,7 +279,7 @@ export function ProxyPoolPage({
       </Card>
       {addOpen && (
         <Modal
-          title={editingGroupName ? "编辑分组" : "新增代理"}
+          title={editingGroupID ? "编辑分组" : "新增代理"}
           subtitle="填写分组名、执行模式和代理列表，支持 http、https、socks5、socks5h"
           onClose={() => {
             setAddOpen(false);
@@ -336,7 +337,7 @@ export function ProxyPoolPage({
               onClick={saveGroup}
               className="rounded-xl bg-slate-950 px-3 py-2 text-sm font-bold text-white"
             >
-              {editingGroupName ? "保存分组" : "确认添加"}
+              {editingGroupID ? "保存分组" : "确认添加"}
             </button>
           </div>
         </Modal>

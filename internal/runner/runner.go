@@ -11,8 +11,8 @@ import (
 
 	"github.com/79E/auto-openai-account/internal/codex"
 	"github.com/79E/auto-openai-account/internal/domain"
-	"github.com/79E/auto-openai-account/internal/proxypool"
 	"github.com/79E/auto-openai-account/internal/legacy"
+	"github.com/79E/auto-openai-account/internal/proxypool"
 	"github.com/79E/auto-openai-account/internal/smsbiz"
 	"github.com/79E/auto-openai-account/internal/storage"
 )
@@ -33,9 +33,9 @@ type activeLogContext struct {
 }
 
 type taskProxyChoice struct {
-	UseLocal   bool
-	GroupName  string
-	Group      domain.ProxyGroup
+	UseLocal  bool
+	GroupName string
+	Group     domain.ProxyGroup
 }
 
 type proxyRuntime struct {
@@ -53,7 +53,7 @@ func New(store *storage.Store) *Runner {
 	return r
 }
 
-func (r *Runner) Start(count int, flow string, smsConfigName string, proxyGroupName string) (domain.RegisterJob, error) {
+func (r *Runner) Start(count int, flow string, smsConfigID string, smsConfigName string, proxyGroupID string, proxyGroupName string) (domain.RegisterJob, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	flow, err := normalizeRegisterFlow(flow)
@@ -72,11 +72,11 @@ func (r *Runner) Start(count int, flow string, smsConfigName string, proxyGroupN
 		return domain.RegisterJob{}, err
 	}
 	if flow == domain.JobTypeRegisterCodex {
-		if _, err := requireSMSConfig(settings, smsConfigName); err != nil {
+		if _, err := requireSMSConfig(settings, smsConfigID, smsConfigName); err != nil {
 			return domain.RegisterJob{}, err
 		}
 	}
-	proxyChoice, err := resolveTaskProxyChoice(settings, proxyGroupName)
+	proxyChoice, err := resolveTaskProxyChoice(settings, proxyGroupID, proxyGroupName)
 	if err != nil {
 		return domain.RegisterJob{}, err
 	}
@@ -100,11 +100,11 @@ func (r *Runner) Start(count int, flow string, smsConfigName string, proxyGroupN
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	r.cancel = cancel
-	go r.runRegister(ctx, job.ID, items, flow, smsConfigName, proxyChoice)
+	go r.runRegister(ctx, job.ID, items, flow, smsConfigID, smsConfigName, proxyChoice)
 	return job, nil
 }
 
-func (r *Runner) StartLogin(ids []int64, flow string, smsConfigName string, proxyGroupName string) (domain.RegisterJob, error) {
+func (r *Runner) StartLogin(ids []int64, flow string, smsConfigID string, smsConfigName string, proxyGroupID string, proxyGroupName string) (domain.RegisterJob, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	flow, err := normalizeLoginFlow(flow)
@@ -133,11 +133,11 @@ func (r *Runner) StartLogin(ids []int64, flow string, smsConfigName string, prox
 		return domain.RegisterJob{}, err
 	}
 	if flow == domain.JobTypeCodexLogin {
-		if _, err := requireSMSConfig(settings, smsConfigName); err != nil {
+		if _, err := requireSMSConfig(settings, smsConfigID, smsConfigName); err != nil {
 			return domain.RegisterJob{}, err
 		}
 	}
-	proxyChoice, err := resolveTaskProxyChoice(settings, proxyGroupName)
+	proxyChoice, err := resolveTaskProxyChoice(settings, proxyGroupID, proxyGroupName)
 	if err != nil {
 		return domain.RegisterJob{}, err
 	}
@@ -152,7 +152,7 @@ func (r *Runner) StartLogin(ids []int64, flow string, smsConfigName string, prox
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	r.cancel = cancel
-	go r.runLogin(ctx, job.ID, items, flow, smsConfigName, proxyChoice)
+	go r.runLogin(ctx, job.ID, items, flow, smsConfigID, smsConfigName, proxyChoice)
 	return job, nil
 }
 
@@ -182,7 +182,7 @@ func (r *Runner) Subscribe(jobID int64) (<-chan domain.RuntimeLog, func()) {
 	}
 }
 
-func (r *Runner) runRegister(ctx context.Context, jobID int64, items []domain.Mailbox, flow string, smsConfigName string, proxyChoice taskProxyChoice) {
+func (r *Runner) runRegister(ctx context.Context, jobID int64, items []domain.Mailbox, flow string, smsConfigID string, smsConfigName string, proxyChoice taskProxyChoice) {
 	defer func() {
 		r.mu.Lock()
 		r.cancel = nil
@@ -207,7 +207,7 @@ func (r *Runner) runRegister(ctx context.Context, jobID int64, items []domain.Ma
 				default:
 				}
 				selector := newProxyRuntime(proxyChoice)
-				r.runRegisterOne(ctx, jobID, mailbox, settings, flow, smsConfigName, selector)
+				r.runRegisterOne(ctx, jobID, mailbox, settings, flow, smsConfigID, smsConfigName, selector)
 			}
 		}(i)
 	}
@@ -230,7 +230,7 @@ func (r *Runner) runRegister(ctx context.Context, jobID int64, items []domain.Ma
 	_ = r.store.RecalculateJob(jobID, status)
 }
 
-func (r *Runner) runLogin(ctx context.Context, jobID int64, items []domain.Mailbox, flow string, smsConfigName string, proxyChoice taskProxyChoice) {
+func (r *Runner) runLogin(ctx context.Context, jobID int64, items []domain.Mailbox, flow string, smsConfigID string, smsConfigName string, proxyChoice taskProxyChoice) {
 	defer func() {
 		r.mu.Lock()
 		r.cancel = nil
@@ -256,7 +256,7 @@ func (r *Runner) runLogin(ctx context.Context, jobID int64, items []domain.Mailb
 				}
 				selector := newProxyRuntime(proxyChoice)
 				if flow == domain.JobTypeCodexLogin {
-					r.runCodexLoginOne(ctx, jobID, mailbox, settings, smsConfigName, selector)
+					r.runCodexLoginOne(ctx, jobID, mailbox, settings, smsConfigID, smsConfigName, selector)
 					continue
 				}
 				r.runLoginOne(ctx, jobID, mailbox, settings, selector)
@@ -282,7 +282,7 @@ func (r *Runner) runLogin(ctx context.Context, jobID int64, items []domain.Mailb
 	_ = r.store.RecalculateJob(jobID, status)
 }
 
-func (r *Runner) runRegisterOne(ctx context.Context, jobID int64, mailbox domain.Mailbox, settings domain.Settings, flow string, smsConfigName string, proxySelector *proxyRuntime) {
+func (r *Runner) runRegisterOne(ctx context.Context, jobID int64, mailbox domain.Mailbox, settings domain.Settings, flow string, smsConfigID string, smsConfigName string, proxySelector *proxyRuntime) {
 	started := time.Now()
 	proxy, err := proxySelector.Start(ctx)
 	_ = r.store.StartJobItem(jobID, mailbox.ID)
@@ -320,7 +320,7 @@ func (r *Runner) runRegisterOne(ctx context.Context, jobID int64, mailbox domain
 	if flow == domain.JobTypeRegisterCodex {
 		updated := mailbox
 		updated.RegisterPassword = result.Password
-		r.runCodexLoginAfterStarted(ctx, jobID, updated, settings, proxySelector, smsConfigName, started, "register_codex")
+		r.runCodexLoginAfterStarted(ctx, jobID, updated, settings, proxySelector, smsConfigID, smsConfigName, started, "register_codex")
 		return
 	}
 	_ = r.store.UpdateJobItem(jobID, mailbox.ID, "success", "", duration)
@@ -400,7 +400,7 @@ func (r *Runner) runLoginOne(ctx context.Context, jobID int64, mailbox domain.Ma
 	r.log(domain.RuntimeLog{JobID: jobID, MailboxID: mailbox.ID, Email: mailbox.Email, Level: "info", Step: "login_complete", Message: "登录换 token 流程完成"})
 }
 
-func (r *Runner) runCodexLoginOne(ctx context.Context, jobID int64, mailbox domain.Mailbox, settings domain.Settings, smsConfigName string, proxySelector *proxyRuntime) {
+func (r *Runner) runCodexLoginOne(ctx context.Context, jobID int64, mailbox domain.Mailbox, settings domain.Settings, smsConfigID string, smsConfigName string, proxySelector *proxyRuntime) {
 	started := time.Now()
 	_ = r.store.StartJobItem(jobID, mailbox.ID)
 	_ = r.store.MarkMailboxLogining(mailbox.ID)
@@ -416,10 +416,10 @@ func (r *Runner) runCodexLoginOne(ctx context.Context, jobID int64, mailbox doma
 	r.setActive(mailbox.Email, activeLogContext{JobID: jobID, MailboxID: mailbox.ID, Email: mailbox.Email, Proxy: proxy})
 	defer r.clearActive(mailbox.Email)
 	r.log(domain.RuntimeLog{JobID: jobID, MailboxID: mailbox.ID, Email: mailbox.Email, Level: "info", Step: "codex_start", StepIndex: 1, StepTotal: 8, Message: "Codex 授权登录流程开始"})
-	r.runCodexLoginAfterStarted(ctx, jobID, mailbox, settings, proxySelector, smsConfigName, started, "codex")
+	r.runCodexLoginAfterStarted(ctx, jobID, mailbox, settings, proxySelector, smsConfigID, smsConfigName, started, "codex")
 }
 
-func (r *Runner) runCodexLoginAfterStarted(ctx context.Context, jobID int64, mailbox domain.Mailbox, settings domain.Settings, proxySelector *proxyRuntime, smsConfigName string, started time.Time, prefix string) {
+func (r *Runner) runCodexLoginAfterStarted(ctx context.Context, jobID int64, mailbox domain.Mailbox, settings domain.Settings, proxySelector *proxyRuntime, smsConfigID string, smsConfigName string, started time.Time, prefix string) {
 	proxy := proxySelector.CurrentProxy()
 	duration := time.Since(started)
 	if ctx.Err() != nil {
@@ -427,7 +427,7 @@ func (r *Runner) runCodexLoginAfterStarted(ctx context.Context, jobID int64, mai
 		_ = r.store.RecalculateJob(jobID, domain.JobStatusStopped)
 		return
 	}
-	smsConfig, err := requireSMSConfig(settings, smsConfigName)
+	smsConfig, err := requireSMSConfig(settings, smsConfigID, smsConfigName)
 	if err != nil {
 		r.failCodexJobItem(jobID, mailbox, prefix, err.Error(), duration)
 		return
@@ -465,12 +465,12 @@ func (r *Runner) runCodexLoginAfterStarted(ctx context.Context, jobID int64, mai
 		}
 	}()
 	loginOpts := codex.LoginOptions{
-		Email:                    mailbox.Email,
-		Password:                 mailboxLoginPassword(mailbox),
-		Proxy:                    proxy,
-		ProxyController:          proxySelector,
-		SMSProvider:              &codexSMSProvider{provider: provider, config: smsConfig},
-		OTPFetcher:               func(ctx context.Context) (string, error) {
+		Email:           mailbox.Email,
+		Password:        mailboxLoginPassword(mailbox),
+		Proxy:           proxy,
+		ProxyController: proxySelector,
+		SMSProvider:     &codexSMSProvider{provider: provider, config: smsConfig},
+		OTPFetcher: func(ctx context.Context) (string, error) {
 			if !canFetchEmailOTP {
 				return "", fmt.Errorf("mailbox is missing required email auth data for otp fallback")
 			}
@@ -548,20 +548,30 @@ func normalizeLoginFlow(flow string) (string, error) {
 	}
 }
 
-func requireSMSConfig(settings domain.Settings, name string) (domain.SMSConfig, error) {
+func requireSMSConfig(settings domain.Settings, id string, name string) (domain.SMSConfig, error) {
+	id = strings.TrimSpace(id)
+	if id != "" {
+		cfg, ok := domain.FindSMSConfigByID(settings.SMSConfigs, id)
+		if !ok {
+			return domain.SMSConfig{}, fmt.Errorf("sms config id %q not found", id)
+		}
+		if strings.TrimSpace(cfg.APIKey) == "" {
+			return domain.SMSConfig{}, fmt.Errorf("sms config %q missing api_key", cfg.Name)
+		}
+		return cfg, nil
+	}
 	name = strings.TrimSpace(name)
 	if name == "" {
-		return domain.SMSConfig{}, fmt.Errorf("sms_config_name is required for codex flow")
+		return domain.SMSConfig{}, fmt.Errorf("sms_config_id is required for codex flow")
 	}
-	for _, cfg := range settings.SMSConfigs {
-		if strings.EqualFold(strings.TrimSpace(cfg.Name), name) {
-			if strings.TrimSpace(cfg.APIKey) == "" {
-				return domain.SMSConfig{}, fmt.Errorf("sms config %q missing api_key", name)
-			}
-			return cfg, nil
-		}
+	cfg, ok := domain.FindSMSConfig(settings.SMSConfigs, name)
+	if !ok {
+		return domain.SMSConfig{}, fmt.Errorf("sms config %q not found", name)
 	}
-	return domain.SMSConfig{}, fmt.Errorf("sms config %q not found", name)
+	if strings.TrimSpace(cfg.APIKey) == "" {
+		return domain.SMSConfig{}, fmt.Errorf("sms config %q missing api_key", cfg.Name)
+	}
+	return cfg, nil
 }
 
 func mailboxLoginPassword(mailbox domain.Mailbox) string {
@@ -861,13 +871,24 @@ func legacyPasswordForSettings(settings domain.Settings) string {
 	return ""
 }
 
-func resolveTaskProxyChoice(settings domain.Settings, proxyGroupName string) (taskProxyChoice, error) {
-	if strings.TrimSpace(proxyGroupName) == "" {
+func resolveTaskProxyChoice(settings domain.Settings, proxyGroupID string, proxyGroupName string) (taskProxyChoice, error) {
+	if strings.TrimSpace(proxyGroupID) == "" && strings.TrimSpace(proxyGroupName) == "" {
 		return taskProxyChoice{UseLocal: true}, nil
 	}
-	group, ok := domain.FindProxyGroup(settings.ProxyGroups, proxyGroupName)
-	if !ok {
-		return taskProxyChoice{}, fmt.Errorf("proxy group %q not found", strings.TrimSpace(proxyGroupName))
+	var (
+		group domain.ProxyGroup
+		ok    bool
+	)
+	if strings.TrimSpace(proxyGroupID) != "" {
+		group, ok = domain.FindProxyGroupByID(settings.ProxyGroups, proxyGroupID)
+		if !ok {
+			return taskProxyChoice{}, fmt.Errorf("proxy group id %q not found", strings.TrimSpace(proxyGroupID))
+		}
+	} else {
+		group, ok = domain.FindProxyGroup(settings.ProxyGroups, proxyGroupName)
+		if !ok {
+			return taskProxyChoice{}, fmt.Errorf("proxy group %q not found", strings.TrimSpace(proxyGroupName))
+		}
 	}
 	if len(group.Proxies) == 0 {
 		return taskProxyChoice{}, fmt.Errorf("proxy group %q has no proxies", group.Name)

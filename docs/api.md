@@ -26,6 +26,7 @@ Unsupported methods return `405 Method Not Allowed`. Missing resources generally
 {
   "proxy_groups": [
     {
+      "id": "d93f40f760db4c90a0df873b59f90f34",
       "name": "us-residential",
       "mode": "round_robin",
       "proxies": ["http://127.0.0.1:8080"]
@@ -42,6 +43,7 @@ Unsupported methods return `405 Method Not Allowed`. Missing resources generally
   "listen": ":8080",
   "sms_configs": [
     {
+      "id": "90b1607f4ff6473ea554787b03d7dc2d",
       "name": "smsbower-main",
       "platform": "smsbower",
       "api_key": "secret",
@@ -60,6 +62,11 @@ Allowed values:
 - `imap_auth_mode`: `auto`, `password`, `xoauth2`
 - `sms_configs[].platform`: `smsbower` or `hero-sms`
 - `sms_configs[].max_price`: `0` means the API request does not send a max price limit
+
+Identity note:
+
+- `proxy_groups[].id` and `sms_configs[].id` are stable unique identifiers used by task creation.
+- `name` remains user-facing display text and should still stay unique for easier management.
 
 Compatibility note:
 
@@ -449,8 +456,8 @@ Request body:
 {
   "count": 1,
   "flow": "register_login",
-  "sms_config_name": "",
-  "proxy_group_name": "us-residential"
+  "sms_config_id": "90b1607f4ff6473ea554787b03d7dc2d",
+  "proxy_group_id": "d93f40f760db4c90a0df873b59f90f34"
 }
 ```
 
@@ -461,8 +468,9 @@ Allowed `flow` values:
 - `register_codex`: register, then normal login token exchange, then Codex authorization login
 
 If `flow` is omitted, the server uses `register_login` for compatibility.
-`register_codex` requires `sms_config_name`; missing or unknown SMS config returns `400` before creating a job.
-Omit `proxy_group_name` or pass an empty string to use direct local network.
+`register_codex` requires `sms_config_id`; missing or unknown SMS config returns `400` before creating a job.
+Omit `proxy_group_id` or pass an empty string to use direct local network.
+For backward compatibility, the server still accepts `sms_config_name` and `proxy_group_name` if the corresponding `*_id` field is omitted.
 
 Response: `RegisterJob`
 
@@ -541,8 +549,8 @@ Request body:
 {
   "mailbox_ids": [1, 2],
   "flow": "login",
-  "sms_config_name": "",
-  "proxy_group_name": "us-residential"
+  "sms_config_id": "90b1607f4ff6473ea554787b03d7dc2d",
+  "proxy_group_id": "d93f40f760db4c90a0df873b59f90f34"
 }
 ```
 
@@ -553,8 +561,9 @@ Allowed `flow` values:
 
 If `flow` is omitted, the server uses `login` for compatibility.
 Both login flows require the mailbox to have an OpenAI login password.
-`codex_login` requires `sms_config_name`; missing or unknown SMS config returns `400` before creating a job.
-Omit `proxy_group_name` or pass an empty string to use direct local network.
+`codex_login` requires `sms_config_id`; missing or unknown SMS config returns `400` before creating a job.
+Omit `proxy_group_id` or pass an empty string to use direct local network.
+For backward compatibility, the server still accepts `sms_config_name` and `proxy_group_name` if the corresponding `*_id` field is omitted.
 
 Response status: `202 Accepted`
 

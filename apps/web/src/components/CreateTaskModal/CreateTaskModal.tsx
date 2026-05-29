@@ -30,15 +30,15 @@ export function CreateTaskModal({
     settings: SettingsPayload,
     count: number,
     flow: TaskFlow,
-    smsConfigName: string,
-    proxyGroupName: string,
+    smsConfigID: string,
+    proxyGroupID: string,
   ) => void;
   onCreateLogin: (
     settings: SettingsPayload,
     ids: number[],
     flow: TaskFlow,
-    smsConfigName: string,
-    proxyGroupName: string,
+    smsConfigID: string,
+    proxyGroupID: string,
   ) => void;
 }) {
   const unused = mailboxes.filter((item) => item.status === "new");
@@ -60,8 +60,8 @@ export function CreateTaskModal({
   });
   const [count, setCount] = useState(Math.min(1, unused.length));
   const [loginFilter, setLoginFilter] = useState("used");
-  const [smsConfigName, setSMSConfigName] = useState(
-    draft.sms_configs[0]?.name || "",
+  const [smsConfigID, setSMSConfigID] = useState(
+    draft.sms_configs[0]?.id || "",
   );
   const [proxyTarget, setProxyTarget] = useState("");
   const isRegisterFlow = ["register_login", "register_codex"].includes(flow);
@@ -73,7 +73,7 @@ export function CreateTaskModal({
     : used.filter((item) => loginFilter === "used" || item.status === loginFilter);
   const selectedSMSExists =
     !isCodexFlow ||
-    draft.sms_configs.some((config) => config.name.trim() === smsConfigName.trim());
+    draft.sms_configs.some((config) => config.id === smsConfigID);
 
   function submit() {
     if (isRegisterFlow) {
@@ -81,7 +81,7 @@ export function CreateTaskModal({
         draft,
         Math.max(1, Math.min(count, unused.length)),
         flow,
-        smsConfigName,
+        smsConfigID,
         proxyTarget,
       );
       return;
@@ -90,7 +90,7 @@ export function CreateTaskModal({
       draft,
       loginCandidates.map((item) => item.id),
       flow,
-      smsConfigName,
+      smsConfigID,
       proxyTarget,
     );
   }
@@ -174,7 +174,7 @@ export function CreateTaskModal({
             >
               <option value="">本地网络（直接请求）</option>
               {draft.proxy_groups.map((group) => (
-                <option key={group.name} value={group.name}>
+                <option key={group.id} value={group.id}>
                   {group.name} · {group.mode === "round_robin" ? "轮询" : "随机"}
                 </option>
               ))}
@@ -248,12 +248,12 @@ export function CreateTaskModal({
             <Field label="SMS 配置">
               <select
                 className={`${styles.input} ${styles.selectInput}`}
-                value={smsConfigName}
-                onChange={(e) => setSMSConfigName(e.target.value)}
+                value={smsConfigID}
+                onChange={(e) => setSMSConfigID(e.target.value)}
               >
                 <option value="">请选择 SMS 配置</option>
                 {draft.sms_configs.map((config) => (
-                  <option key={config.name} value={config.name}>
+                  <option key={config.id} value={config.id}>
                     {config.name} · {config.platform}
                   </option>
                 ))}

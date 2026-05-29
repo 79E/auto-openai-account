@@ -1,6 +1,8 @@
 package domain
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"strings"
 )
@@ -27,6 +29,7 @@ const (
 )
 
 type SMSConfig struct {
+	ID        string  `json:"id"`
 	Name      string  `json:"name"`
 	Platform  string  `json:"platform"`
 	APIKey    string  `json:"api_key"`
@@ -36,25 +39,26 @@ type SMSConfig struct {
 }
 
 type ProxyGroup struct {
+	ID      string   `json:"id"`
 	Name    string   `json:"name"`
 	Mode    string   `json:"mode"`
 	Proxies []string `json:"proxies"`
 }
 
 type Settings struct {
-	ProxyMode              string      `json:"proxy_mode"`
-	Proxies                []string    `json:"proxies"`
+	ProxyMode              string       `json:"proxy_mode"`
+	Proxies                []string     `json:"proxies"`
 	ProxyGroups            []ProxyGroup `json:"proxy_groups"`
-	PasswordMode           string      `json:"password_mode"`
-	FixedPassword          string      `json:"fixed_password"`
-	RegisterConcurrency    int         `json:"register_concurrency"`
-	OTPTimeoutSeconds      int         `json:"otp_timeout_seconds"`
-	OTPPollIntervalSeconds int         `json:"otp_poll_interval_seconds"`
-	IMAPHost               string      `json:"imap_host"`
-	IMAPPort               int         `json:"imap_port"`
-	IMAPAuthMode           string      `json:"imap_auth_mode"`
-	Listen                 string      `json:"listen"`
-	SMSConfigs             []SMSConfig `json:"sms_configs"`
+	PasswordMode           string       `json:"password_mode"`
+	FixedPassword          string       `json:"fixed_password"`
+	RegisterConcurrency    int          `json:"register_concurrency"`
+	OTPTimeoutSeconds      int          `json:"otp_timeout_seconds"`
+	OTPPollIntervalSeconds int          `json:"otp_poll_interval_seconds"`
+	IMAPHost               string       `json:"imap_host"`
+	IMAPPort               int          `json:"imap_port"`
+	IMAPAuthMode           string       `json:"imap_auth_mode"`
+	Listen                 string       `json:"listen"`
+	SMSConfigs             []SMSConfig  `json:"sms_configs"`
 }
 
 type Mailbox struct {
@@ -159,8 +163,10 @@ func NormalizeSettings(s Settings) Settings {
 	if s.ProxyMode != "local" && s.ProxyMode != "single" && s.ProxyMode != "round_robin" {
 		s.ProxyMode = "random"
 	}
+	seenGroupIDs := map[string]struct{}{}
 	normalizedGroups := make([]ProxyGroup, 0, len(s.ProxyGroups))
 	for _, group := range s.ProxyGroups {
+		group.ID = normalizeSettingsItemID(group.ID, seenGroupIDs)
 		group.Name = strings.TrimSpace(group.Name)
 		group.Mode = normalizeProxyGroupMode(group.Mode)
 		group.Proxies = normalizeProxyList(group.Proxies)
@@ -174,7 +180,7 @@ func NormalizeSettings(s Settings) Settings {
 		if s.ProxyMode == "round_robin" {
 			mode = "round_robin"
 		}
-		normalizedGroups = []ProxyGroup{{Name: "默认分组", Mode: mode, Proxies: append([]string(nil), s.Proxies...)}}
+		normalizedGroups = []ProxyGroup{{ID: normalizeSettingsItemID("", seenGroupIDs), Name: "默认分组", Mode: mode, Proxies: append([]string(nil), s.Proxies...)}}
 	}
 	s.ProxyGroups = normalizedGroups
 	if s.PasswordMode != "fixed" {
@@ -204,7 +210,10 @@ func NormalizeSettings(s Settings) Settings {
 	if s.Listen == "" {
 		s.Listen = ":8080"
 	}
+	seenSMSIDs := map[string]struct{}{}
 	for i := range s.SMSConfigs {
+		s.SMSConfigs[i].ID = normalizeSettingsItemID(s.SMSConfigs[i].ID, seenSMSIDs)
+		s.SMSConfigs[i].Name = strings.TrimSpace(s.SMSConfigs[i].Name)
 		if s.SMSConfigs[i].Platform == "" {
 			s.SMSConfigs[i].Platform = "smsbower"
 		}
@@ -220,8 +229,16 @@ func NormalizeSettings(s Settings) Settings {
 
 func ValidateSettings(s Settings) error {
 	s = NormalizeSettings(s)
-	seen := map[string]string{}
+	seenProxyNames := map[string]string{}
+	seenProxyIDs := map[string]struct{}{}
 	for _, group := range s.ProxyGroups {
+		if strings.TrimSpace(group.ID) == "" {
+			return fmt.Errorf("proxy group id is required")
+		}
+		if _, ok := seenProxyIDs[group.ID]; ok {
+			return fmt.Errorf("proxy group id %q already exists", group.ID)
+		}
+		seenProxyIDs[group.ID] = struct{}{}
 		name := strings.TrimSpace(group.Name)
 		if name == "" {
 			return fmt.Errorf("proxy group name is required")
@@ -230,12 +247,71 @@ func ValidateSettings(s Settings) error {
 			return fmt.Errorf("proxy group %q must contain at least one proxy", name)
 		}
 		key := strings.ToLower(name)
-		if existing, ok := seen[key]; ok {
+		if existing, ok := seenProxyNames[key]; ok {
 			return fmt.Errorf("proxy group %q already exists", existing)
 		}
-		seen[key] = name
+		seenProxyNames[key] = name
+	}
+	seenSMSNames := map[string]string{}
+	seenSMSIDs := map[string]struct{}{}
+	for _, config := range s.SMSConfigs {
+		if strings.TrimSpace(config.ID) == "" {
+			return fmt.Errorf("sms config id is required")
+		}
+		if _, ok := seenSMSIDs[config.ID]; ok {
+			return fmt.Errorf("sms config id %q already exists", config.ID)
+		}
+		seenSMSIDs[config.ID] = struct{}{}
+		name := strings.TrimSpace(config.Name)
+		if name == "" {
+			continue
+		}
+		key := strings.ToLower(name)
+		if existing, ok := seenSMSNames[key]; ok {
+			return fmt.Errorf("sms config %q already exists", existing)
+		}
+		seenSMSNames[key] = name
 	}
 	return nil
+}
+
+func FindSMSConfigByID(configs []SMSConfig, id string) (SMSConfig, bool) {
+	target := strings.TrimSpace(id)
+	if target == "" {
+		return SMSConfig{}, false
+	}
+	for _, config := range configs {
+		if strings.TrimSpace(config.ID) == target {
+			return config, true
+		}
+	}
+	return SMSConfig{}, false
+}
+
+func FindSMSConfig(configs []SMSConfig, name string) (SMSConfig, bool) {
+	target := strings.TrimSpace(name)
+	if target == "" {
+		return SMSConfig{}, false
+	}
+	for _, config := range configs {
+		if strings.EqualFold(strings.TrimSpace(config.Name), target) {
+			return config, true
+		}
+	}
+	return SMSConfig{}, false
+}
+
+func FindProxyGroupByID(groups []ProxyGroup, id string) (ProxyGroup, bool) {
+	target := strings.TrimSpace(id)
+	if target == "" {
+		return ProxyGroup{}, false
+	}
+	for _, group := range groups {
+		if strings.TrimSpace(group.ID) == target {
+			return group, true
+		}
+	}
+	return ProxyGroup{}, false
 }
 
 func FindProxyGroup(groups []ProxyGroup, name string) (ProxyGroup, bool) {
@@ -256,6 +332,32 @@ func normalizeProxyGroupMode(mode string) string {
 		return "round_robin"
 	}
 	return "random"
+}
+
+func normalizeSettingsItemID(id string, seen map[string]struct{}) string {
+	id = strings.TrimSpace(id)
+	if id != "" {
+		if _, ok := seen[id]; !ok {
+			seen[id] = struct{}{}
+			return id
+		}
+	}
+	for {
+		candidate := newSettingsItemID()
+		if _, ok := seen[candidate]; ok {
+			continue
+		}
+		seen[candidate] = struct{}{}
+		return candidate
+	}
+}
+
+func newSettingsItemID() string {
+	buf := make([]byte, 16)
+	if _, err := rand.Read(buf); err != nil {
+		panic("generate settings item id: " + err.Error())
+	}
+	return hex.EncodeToString(buf)
 }
 
 func normalizeProxyList(values []string) []string {

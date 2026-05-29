@@ -6,6 +6,13 @@ type RawSettingsPayload = Partial<SettingsPayload> & {
   proxies?: string[];
 };
 
+export function createSettingsItemID() {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID().replace(/-/g, "");
+  }
+  return `${Date.now().toString(16)}${Math.random().toString(16).slice(2)}`;
+}
+
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, {
     headers: { "Content-Type": "application/json" },
@@ -25,6 +32,7 @@ export function normalizeSettingsPayload(settings: RawSettingsPayload): Settings
   const proxyGroups = Array.isArray(settings.proxy_groups)
     ? settings.proxy_groups
         .map((group) => ({
+          id: group?.id || createSettingsItemID(),
           name: group?.name || "",
           mode: group?.mode === "round_robin" ? "round_robin" : "random",
           proxies: Array.isArray(group?.proxies)
@@ -38,7 +46,7 @@ export function normalizeSettingsPayload(settings: RawSettingsPayload): Settings
       proxyGroups.length > 0
         ? proxyGroups
         : proxies.length > 0
-          ? [{ name: "默认分组", mode: settings.proxy_mode === "round_robin" ? "round_robin" : "random", proxies }]
+          ? [{ id: createSettingsItemID(), name: "默认分组", mode: settings.proxy_mode === "round_robin" ? "round_robin" : "random", proxies }]
           : [],
     register_concurrency: Number(settings.register_concurrency) || 1,
     password_mode: settings.password_mode || "random",
@@ -51,6 +59,7 @@ export function normalizeSettingsPayload(settings: RawSettingsPayload): Settings
     listen: settings.listen || ":8080",
     sms_configs: Array.isArray(settings.sms_configs)
       ? settings.sms_configs.map((config) => ({
+          id: config.id || createSettingsItemID(),
           name: config.name || "",
           platform: config.platform || "smsbower",
           api_key: config.api_key || "",

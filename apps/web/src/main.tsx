@@ -252,8 +252,8 @@ function App() {
     config: SettingsPayload,
     count: number,
     flow = "register_login",
-    smsConfigName = "",
-    proxyGroupName = "",
+    smsConfigID = "",
+    proxyGroupID = "",
   ) {
     setBusy(true);
     try {
@@ -263,8 +263,12 @@ function App() {
         body: JSON.stringify({
           count,
           flow,
-          sms_config_name: smsConfigName,
-          proxy_group_name: proxyGroupName,
+          sms_config_id: smsConfigID,
+          sms_config_name:
+            config.sms_configs.find((item) => item.id === smsConfigID)?.name || "",
+          proxy_group_id: proxyGroupID,
+          proxy_group_name:
+            config.proxy_groups.find((item) => item.id === proxyGroupID)?.name || "",
         }),
       });
       setActiveJob(job);
@@ -285,8 +289,8 @@ function App() {
     config: SettingsPayload,
     ids: number[],
     flow = "login",
-    smsConfigName = "",
-    proxyGroupName = "",
+    smsConfigID = "",
+    proxyGroupID = "",
   ) {
     if (ids.length === 0) return;
     setBusy(true);
@@ -297,8 +301,12 @@ function App() {
         body: JSON.stringify({
           mailbox_ids: ids,
           flow,
-          sms_config_name: smsConfigName,
-          proxy_group_name: proxyGroupName,
+          sms_config_id: smsConfigID,
+          sms_config_name:
+            config.sms_configs.find((item) => item.id === smsConfigID)?.name || "",
+          proxy_group_id: proxyGroupID,
+          proxy_group_name:
+            config.proxy_groups.find((item) => item.id === proxyGroupID)?.name || "",
         }),
       });
       setActiveJob(job);
