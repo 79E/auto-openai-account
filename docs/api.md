@@ -34,7 +34,17 @@ Unsupported methods return `405 Method Not Allowed`. Missing resources generally
   "imap_host": "outlook.office365.com",
   "imap_port": 993,
   "imap_auth_mode": "auto",
-  "listen": ":8080"
+  "listen": ":8080",
+  "sms_configs": [
+    {
+      "name": "smsbower-main",
+      "platform": "smsbower",
+      "api_key": "secret",
+      "service_id": "dr",
+      "country_id": 38,
+      "max_price": 0
+    }
+  ]
 }
 ```
 
@@ -43,6 +53,8 @@ Allowed values:
 - `proxy_mode`: `local`, `single`, `round_robin`, `random`
 - `password_mode`: `random`, `fixed`
 - `imap_auth_mode`: `auto`, `password`, `xoauth2`
+- `sms_configs[].platform`: `smsbower` or `hero-sms`
+- `sms_configs[].max_price`: `0` means the API request does not send a max price limit
 
 ### Mailbox
 
@@ -65,6 +77,7 @@ Allowed values:
   "proxy": "",
   "registered_at": "",
   "last_login_at": "",
+  "phone_number": "",
   "last_job_id": 0,
   "last_job_type": "",
   "last_job_status": "",
@@ -109,7 +122,10 @@ Mailbox statuses:
 Job types:
 
 - `register`
+- `register_login`
+- `register_codex`
 - `login`
+- `codex_login`
 
 Job statuses:
 
@@ -174,6 +190,29 @@ Item statuses:
 
 `ip` and `error` may be omitted when empty.
 
+### SMSCatalog
+
+```json
+{
+  "services": [
+    {
+      "code": "dr",
+      "name": "OpenAI"
+    }
+  ],
+  "countries": [
+    {
+      "id": 38,
+      "rus": "",
+      "eng": "United States",
+      "chn": "美国"
+    }
+  ]
+}
+```
+
+SMS service and country lists are fetched from the selected SMS provider.
+
 ## Endpoints
 
 ### GET /api/health
@@ -211,6 +250,26 @@ Response:
 ```
 
 `settings` is the normalized saved `Settings` object.
+
+### POST /api/sms/catalog
+
+Fetches SMS service and country lists from the selected provider.
+
+Request body:
+
+```json
+{
+  "platform": "smsbower",
+  "api_key": "secret"
+}
+```
+
+Response: `SMSCatalog`
+
+Supported platforms:
+
+- `smsbower`
+- `hero-sms`
 
 ### POST /api/mailboxes/import
 
@@ -377,9 +436,20 @@ Request body:
 
 ```json
 {
-  "count": 1
+  "count": 1,
+  "flow": "register_login",
+  "sms_config_name": ""
 }
 ```
+
+Allowed `flow` values:
+
+- `register`: register only, no token login
+- `register_login`: register, then normal login token exchange
+- `register_codex`: register, then normal login token exchange, then Codex authorization login
+
+If `flow` is omitted, the server uses `register_login` for compatibility.
+`register_codex` requires `sms_config_name`; missing or unknown SMS config returns `400` before creating a job.
 
 Response: `RegisterJob`
 
@@ -456,13 +526,24 @@ Request body:
 
 ```json
 {
-  "mailbox_ids": [1, 2]
+  "mailbox_ids": [1, 2],
+  "flow": "login",
+  "sms_config_name": ""
 }
 ```
 
+Allowed `flow` values:
+
+- `login`: normal login token exchange
+- `codex_login`: Codex authorization login
+
+If `flow` is omitted, the server uses `login` for compatibility.
+Both login flows require the mailbox to have an OpenAI login password.
+`codex_login` requires `sms_config_name`; missing or unknown SMS config returns `400` before creating a job.
+
 Response status: `202 Accepted`
 
-Response: `RegisterJob` with type `login`.
+Response: `RegisterJob` with type matching `flow`.
 
 ### POST /api/proxy/test
 

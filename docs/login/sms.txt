@@ -1,0 +1,323 @@
+# hero-sms.com
+https://hero-sms.com/cn/api#tag/sms-activate/GET?action=getServicesList
+
+
+错误格式都是一样的：{
+  "title": "WRONG_MAX_PRICE",
+  "details": "The maximum price is less than the permitted price",
+  "info": {
+    "min": 0.1234
+  }
+}
+
+## 请求账户余额
+以“ACCESS_BALANCE:”格式返回当前余额
+curl 'https://hero-sms.com/stubs/handler_api.php?action=getBalance&api_key=YOUR_SECRET_TOKEN'
+Query Parameters：
+serviceCopy link to service
+Type:string
+required
+服务编号
+
+countryCopy link to country
+Type:number
+required
+国家 ID
+
+operatorCopy link to operator
+Type:string
+所需电信运营商列表（用逗号分隔，不带空格）
+
+maxPriceCopy link to maxPrice
+Type:number
+最高价格
+
+fixedPriceCopy link to fixedPrice
+Type:string
+嚴格按照指定的最高價格（maxPrice）購買。請與 maxPrice 參數一起使用。
+
+refCopy link to ref
+Type:string
+转介人标识符
+
+phoneExceptionCopy link to phoneException
+Type:string
+排除前缀。您将不会获得带有指定前缀的号码。最多20个前缀。
+返回：
+ACCESS_BALANCE:100.5
+
+## 请求号码
+curl 'https://hero-sms.com/stubs/handler_api.php?action=getNumberV2&service=tg&country=2&api_key=YOUR_SECRET_TOKEN'
+Query Parameters
+serviceCopy link to service
+Type:string
+required
+Example
+服务编号
+
+countryCopy link to country
+Type:number
+required
+Example
+国家 ID
+
+operatorCopy link to operator
+Type:string
+Example
+所需电信运营商列表（用逗号分隔，不带空格）
+
+maxPriceCopy link to maxPrice
+Type:number
+Example
+最高价格
+
+fixedPriceCopy link to fixedPrice
+Type:string
+Example
+嚴格按照指定的最高價格（maxPrice）購買。請與 maxPrice 參數一起使用。
+
+refCopy link to ref
+Type:string
+Example
+转介人标识符
+
+phoneExceptionCopy link to phoneException
+Type:string
+Example
+排除前缀。您将不会获得带有指定前缀的号码。最多20个前缀。
+出参：
+{
+  "activationId": "635468024",
+  "phoneNumber": "79584******",
+  "activationCost": 12.5,
+  "currency": 840,
+  "countryCode": 6,
+  "countryPhoneCode": 62,
+  "canGetAnotherSms": true,
+  "activationTime": "2026-02-18T16:11:33+00:00",
+  "activationEndTime": "2026-02-18T18:11:23+00:00",
+  "activationOperator": "any"
+}
+
+## 获取V2激活状态
+curl 'https://hero-sms.com/stubs/handler_api.php?action=getStatusV2&id=123456789&api_key=YOUR_SECRET_TOKEN'
+
+Query Parameters
+idCopy link to id
+Type:integer
+required
+Example
+激活 ID
+
+{
+  "verificationType": 2,
+  "sms": {
+    "dateTime": "0000-00-00 00:00:00",
+    "code": "code",
+    "text": "sms text"
+  },
+  "call": {
+    "from": "phone",
+    "text": "voice text",
+    "code": "12345",
+    "dateTime": "0000-00-00 00:00:00",
+    "url": "voice file url",
+    "parsingCount": 1
+  }
+}
+
+## 更改激活状态​Copy link
+激活生命周期管理。 可能的状态：
+
+3 — 请求重新发送短信
+6 — 完成激活（收到并确认代码）
+8 — 取消激活（返还资金）
+
+curl 'https://hero-sms.com/stubs/handler_api.php?action=setStatus&id=123456789&status=1&api_key=YOUR_SECRET_TOKEN'
+
+Query Parameters
+idCopy link to id
+Type:integer
+required
+Example
+激活 ID
+
+statusCopy link to status
+required
+激活状态
+
+
+One of
+请求代码
+enum
+const:  
+3
+Default
+Example
+Integer numbers.
+3
+
+## 请求国家列表​Copy link
+返回国家列表
+
+curl 'https://hero-sms.com/stubs/handler_api.php?action=getCountries&api_key=YOUR_SECRET_TOKEN'
+
+[
+  {
+    "id": 2,
+    "rus": "Казахстан",
+    "eng": "Kazakhstan",
+    "chn": "哈萨克斯坦",
+    "visible": 1,
+    "retry": 1
+  }
+]
+
+## 索取服务清单​Copy link
+返回服务列表
+curl 'https://hero-sms.com/stubs/handler_api.php?action=getServicesList&api_key=YOUR_SECRET_TOKEN'
+
+{
+  "status": "success",
+  "services": [
+    {
+      "code": "aoo",
+      "name": "Pegasus Airlines"
+    }
+  ]
+}
+
+
+# smsbower.app 
+https://smsbower.app/cn/api?page=client
+
+## 请求号码V2
+https://smsbower.page/stubs/handler_api.php?api_key=WYkWwbRTuX2LeKpr9pNh92Eiv*******&action=getN
+umberV2&service=$service&country=$country&maxPrice=$maxPrice
+&providerIds=$providerIds&exceptProviderIds=$exceptProviderIds
+&userID=$userID&minPrice=$minPrice
+
+参数
+api_key - API 密钥
+$service - 订购服务 见表
+$country - 国家号码 见表
+$maxPrice - 您准备购买号码的最高价格
+$providerIds - 将进行采购的供应商列表，用逗号分隔 (1,2,3)
+$exceptProviderIds - 从号码购买中排除的供应商列表，用逗号分隔 (1,2,3)
+$userID - 新的经销商参数，请联系支持获取详细信息。
+$minPrice - 您愿意购买该号码的最低价格
+通过API获取号码即表示您同意项目规则 项目规则
+
+
+答案
+如果请求成功，响应将采用以下格式： .
+
+{
+               "activationId": "id",
+               "phoneNumber": number,
+               "activationCost": activationCost,
+               "countryCode": countryCode,
+               "canGetAnotherSms": canGetAnotherSms,
+               "activationTime": activationTime,
+               "activationOperator": activationOperator,
+}
+可能有错误:
+BAD_KEY - api 密钥不正确
+BAD_ACTION - 错误的动作
+BAD_SERVICE - 不正确的服务名称
+
+
+## 服务列表
+https://smsbower.page/stubs/handler_api.php?api_key=WYkWwbRTuX2LeKpr9pNh92Eiv*******&action=getServicesList
+参数
+$api_key - API 密钥
+
+答案
+JSON - 对象格式
+
+
+    {
+        "status": "success",
+        "services": [
+            {
+                "code": "kt",
+                "name": "KakaoTalk"
+            }
+        ]
+    }
+
+## 国家列表
+https://smsbower.page/stubs/handler_api.php?api_key=WYkWwbRTuX2LeKpr9pNh92Eiv*******&action=getCountries
+参数
+$api_key - API 密钥
+
+答案
+JSON - 对象格式
+
+
+    {
+        {
+            "id": 1003
+            "rus": "Бермуды"
+            "eng": "Bermuda"
+            "chn": "百慕大"
+        }
+    }
+
+## 获取短信代码（激活状态）
+https://smsbower.page/stubs/handler_api.php?api_key=WYkWwbRTuX2LeKpr9pNh92Eiv*******&action=getStatus&id=$id
+参数
+$api_key - API 密钥
+$id - 激活ID
+
+答案
+STATUS_WAIT_CODE - 等待短信
+STATUS_WAIT_RETRY:$lastCode - 等待下一条短信
+STATUS_CANCEL - 激活被取消
+STATUS_OK: 'activation code' - 收到代码
+
+可能有错误:
+BAD_KEY - api 密钥不正确
+BAD_ACTION - 错误的动作
+NO_ACTIVATION - id 激活没存在
+
+## 激活状态的修改
+https://smsbower.page/stubs/handler_api.php?api_key=WYkWwbRTuX2LeKpr9pNh92Eiv*******&action=setSt
+atus&status=$status&id=$id
+
+参数
+$api_key - API 密钥
+$id - 激活ID
+$status - 激活状态
+1 - 通知号码准备就绪（短信发送到号码）
+3 - 请求另一个代码（免费）
+6 - 完整激活 *
+8 - 通知号码已被使用并取消激活
+API年表的简单逻辑:
+
+使用 getNumber 方法获取号码，然后可以进行以下行为:
+8 - 取消激活（如果该号码不适合您）
+1 - 报告已发送短信（可选）
+
+要以状态1激活:
+8 - 取消激活
+
+收到代码后立即:
+3 - 请求另一个短信
+6 - 确认短信代码并完成激活
+
+要以状态3激活:
+6 - 确认短信代码并完成激活
+
+答案
+ACCESS_READY - phone is ready for getting SMS
+ACCESS_RETRY_GET - 期待新短信
+ACCESS_ACTIVATION - 服务成功激活
+ACCESS_CANCEL - 激活取消
+
+可能有错误:
+NO_ACTIVATION - id 激活没存在
+BAD_STATUS - 不正确的状态
+BAD_KEY - api 密钥不正确
+BAD_ACTION - 错误的动作
+EARLY_CANCEL_DENIED - 购买后2分钟内可以取消号码

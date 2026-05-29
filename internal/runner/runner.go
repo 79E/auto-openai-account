@@ -10,8 +10,10 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/79E/auto-openai-account/internal/codex"
 	"github.com/79E/auto-openai-account/internal/domain"
 	"github.com/79E/auto-openai-account/internal/legacy"
+	"github.com/79E/auto-openai-account/internal/smsbiz"
 	"github.com/79E/auto-openai-account/internal/storage"
 )
 
@@ -38,15 +40,28 @@ func New(store *storage.Store) *Runner {
 	return r
 }
 
-func (r *Runner) Start(count int) (domain.RegisterJob, error) {
+func (r *Runner) Start(count int, flow string, smsConfigName string) (domain.RegisterJob, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	flow, err := normalizeRegisterFlow(flow)
+	if err != nil {
+		return domain.RegisterJob{}, err
+	}
 	running, err := r.store.RunningJobExists()
 	if err != nil {
 		return domain.RegisterJob{}, err
 	}
 	if running || r.cancel != nil {
 		return domain.RegisterJob{}, fmt.Errorf("register job is already running")
+	}
+	settings, err := r.store.LoadSettings()
+	if err != nil {
+		return domain.RegisterJob{}, err
+	}
+	if flow == domain.JobTypeRegisterCodex {
+		if _, err := requireSMSConfig(settings, smsConfigName); err != nil {
+			return domain.RegisterJob{}, err
+		}
 	}
 	available, err := r.store.CountMailboxesByStatus(domain.MailboxStatusNew)
 	if err != nil {
@@ -62,19 +77,23 @@ func (r *Runner) Start(count int) (domain.RegisterJob, error) {
 	if err != nil {
 		return domain.RegisterJob{}, err
 	}
-	job, err := r.store.CreateJob(count, items)
+	job, err := r.store.CreateTypedJob(flow, count, items)
 	if err != nil {
 		return domain.RegisterJob{}, err
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	r.cancel = cancel
-	go r.run(ctx, job.ID, items)
+	go r.runRegister(ctx, job.ID, items, flow, smsConfigName)
 	return job, nil
 }
 
-func (r *Runner) StartLogin(ids []int64) (domain.RegisterJob, error) {
+func (r *Runner) StartLogin(ids []int64, flow string, smsConfigName string) (domain.RegisterJob, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	flow, err := normalizeLoginFlow(flow)
+	if err != nil {
+		return domain.RegisterJob{}, err
+	}
 	running, err := r.store.RunningJobExists()
 	if err != nil {
 		return domain.RegisterJob{}, err
@@ -92,13 +111,27 @@ func (r *Runner) StartLogin(ids []int64) (domain.RegisterJob, error) {
 	if len(items) == 0 {
 		return domain.RegisterJob{}, fmt.Errorf("no mailboxes found")
 	}
-	job, err := r.store.CreateTypedJob(domain.JobTypeLogin, len(items), items)
+	settings, err := r.store.LoadSettings()
+	if err != nil {
+		return domain.RegisterJob{}, err
+	}
+	if flow == domain.JobTypeCodexLogin {
+		if _, err := requireSMSConfig(settings, smsConfigName); err != nil {
+			return domain.RegisterJob{}, err
+		}
+	}
+	for _, item := range items {
+		if mailboxLoginPassword(item) == "" {
+			return domain.RegisterJob{}, fmt.Errorf("mailbox %s does not have a password for login", item.Email)
+		}
+	}
+	job, err := r.store.CreateTypedJob(flow, len(items), items)
 	if err != nil {
 		return domain.RegisterJob{}, err
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	r.cancel = cancel
-	go r.runLogin(ctx, job.ID, items)
+	go r.runLogin(ctx, job.ID, items, flow, smsConfigName)
 	return job, nil
 }
 
@@ -128,7 +161,7 @@ func (r *Runner) Subscribe(jobID int64) (<-chan domain.RuntimeLog, func()) {
 	}
 }
 
-func (r *Runner) run(ctx context.Context, jobID int64, items []domain.Mailbox) {
+func (r *Runner) runRegister(ctx context.Context, jobID int64, items []domain.Mailbox, flow string, smsConfigName string) {
 	defer func() {
 		r.mu.Lock()
 		r.cancel = nil
@@ -152,7 +185,7 @@ func (r *Runner) run(ctx context.Context, jobID int64, items []domain.Mailbox) {
 					return
 				default:
 				}
-				r.runOne(ctx, jobID, mailbox, settings)
+				r.runRegisterOne(ctx, jobID, mailbox, settings, flow, smsConfigName)
 			}
 		}(i)
 	}
@@ -175,7 +208,7 @@ func (r *Runner) run(ctx context.Context, jobID int64, items []domain.Mailbox) {
 	_ = r.store.RecalculateJob(jobID, status)
 }
 
-func (r *Runner) runLogin(ctx context.Context, jobID int64, items []domain.Mailbox) {
+func (r *Runner) runLogin(ctx context.Context, jobID int64, items []domain.Mailbox, flow string, smsConfigName string) {
 	defer func() {
 		r.mu.Lock()
 		r.cancel = nil
@@ -198,6 +231,10 @@ func (r *Runner) runLogin(ctx context.Context, jobID int64, items []domain.Mailb
 				case <-ctx.Done():
 					return
 				default:
+				}
+				if flow == domain.JobTypeCodexLogin {
+					r.runCodexLoginOne(ctx, jobID, mailbox, settings, smsConfigName)
+					continue
 				}
 				r.runLoginOne(ctx, jobID, mailbox, settings)
 			}
@@ -222,7 +259,7 @@ func (r *Runner) runLogin(ctx context.Context, jobID int64, items []domain.Mailb
 	_ = r.store.RecalculateJob(jobID, status)
 }
 
-func (r *Runner) runOne(ctx context.Context, jobID int64, mailbox domain.Mailbox, settings domain.Settings) {
+func (r *Runner) runRegisterOne(ctx context.Context, jobID int64, mailbox domain.Mailbox, settings domain.Settings, flow string, smsConfigName string) {
 	started := time.Now()
 	proxy := pickProxy(settings)
 	_ = r.store.StartJobItem(jobID, mailbox.ID)
@@ -232,7 +269,8 @@ func (r *Runner) runOne(ctx context.Context, jobID int64, mailbox domain.Mailbox
 	legacySettings := legacy.SettingsFromDomain(settings, proxy)
 	provider := legacy.OTPProvider{Settings: legacySettings, Mailbox: legacyMailbox, Since: started}
 	registerPass := legacyPasswordForSettings(settings)
-	result, err := legacy.RegisterOne(ctx, legacy.RegisterInput{Mailbox: legacyMailbox, Settings: legacySettings, RegisterPass: registerPass, OTPFetcher: provider.Fetch})
+	skipTokenLogin := flow == domain.JobTypeRegister
+	result, err := legacy.RegisterOne(ctx, legacy.RegisterInput{Mailbox: legacyMailbox, Settings: legacySettings, RegisterPass: registerPass, OTPFetcher: provider.Fetch, SkipTokenLogin: skipTokenLogin})
 	duration := time.Since(started)
 	if ctx.Err() != nil {
 		_ = r.store.UpdateJobItem(jobID, mailbox.ID, "failed", "手动结束任务", duration)
@@ -248,9 +286,19 @@ func (r *Runner) runOne(ctx context.Context, jobID int64, mailbox domain.Mailbox
 		return
 	}
 	_ = r.store.MarkMailboxRegistered(mailbox.ID, result.Password, legacy.CompactTokenJSON(result.TokenPayload))
+	if flow == domain.JobTypeRegisterCodex {
+		updated := mailbox
+		updated.RegisterPassword = result.Password
+		r.runCodexLoginAfterStarted(ctx, jobID, updated, settings, proxy, smsConfigName, started, "register_codex")
+		return
+	}
 	_ = r.store.UpdateJobItem(jobID, mailbox.ID, "success", "", duration)
 	_ = r.store.RecalculateJob(jobID, "")
-	r.log(domain.RuntimeLog{JobID: jobID, MailboxID: mailbox.ID, Email: mailbox.Email, Level: "info", Step: "complete", StepIndex: 8, StepTotal: 8, Message: "注册流程完成"})
+	message := "注册流程完成"
+	if flow == domain.JobTypeRegisterLogin {
+		message = "注册并普通登录流程完成"
+	}
+	r.log(domain.RuntimeLog{JobID: jobID, MailboxID: mailbox.ID, Email: mailbox.Email, Level: "info", Step: "complete", StepIndex: 8, StepTotal: 8, Message: message})
 }
 
 func (r *Runner) LoginMailbox(mailbox domain.Mailbox, settings domain.Settings) error {
@@ -306,6 +354,200 @@ func (r *Runner) runLoginOne(ctx context.Context, jobID int64, mailbox domain.Ma
 	_ = r.store.UpdateJobItem(jobID, mailbox.ID, "success", "", duration)
 	_ = r.store.RecalculateJob(jobID, "")
 	r.log(domain.RuntimeLog{JobID: jobID, MailboxID: mailbox.ID, Email: mailbox.Email, Level: "info", Step: "login_complete", Message: "登录换 token 流程完成"})
+}
+
+func (r *Runner) runCodexLoginOne(ctx context.Context, jobID int64, mailbox domain.Mailbox, settings domain.Settings, smsConfigName string) {
+	started := time.Now()
+	proxy := pickProxy(settings)
+	_ = r.store.StartJobItem(jobID, mailbox.ID)
+	_ = r.store.MarkMailboxLogining(mailbox.ID)
+	r.setActive(mailbox.Email, activeLogContext{JobID: jobID, MailboxID: mailbox.ID, Email: mailbox.Email, Proxy: proxy})
+	defer r.clearActive(mailbox.Email)
+	r.log(domain.RuntimeLog{JobID: jobID, MailboxID: mailbox.ID, Email: mailbox.Email, Level: "info", Step: "codex_start", StepIndex: 1, StepTotal: 8, Message: "Codex 授权登录流程开始"})
+	r.runCodexLoginAfterStarted(ctx, jobID, mailbox, settings, proxy, smsConfigName, started, "codex")
+}
+
+func (r *Runner) runCodexLoginAfterStarted(ctx context.Context, jobID int64, mailbox domain.Mailbox, settings domain.Settings, proxy string, smsConfigName string, started time.Time, prefix string) {
+	duration := time.Since(started)
+	if ctx.Err() != nil {
+		_ = r.store.UpdateJobItem(jobID, mailbox.ID, "failed", "手动结束任务", duration)
+		_ = r.store.RecalculateJob(jobID, domain.JobStatusStopped)
+		return
+	}
+	smsConfig, err := requireSMSConfig(settings, smsConfigName)
+	if err != nil {
+		r.failCodexJobItem(jobID, mailbox, prefix, err.Error(), duration)
+		return
+	}
+	provider, err := smsbiz.NewProvider(smsbiz.Config{
+		Platform:  smsConfig.Platform,
+		APIKey:    smsConfig.APIKey,
+		ServiceID: smsConfig.ServiceID,
+		CountryID: smsConfig.CountryID,
+		MaxPrice:  smsConfig.MaxPrice,
+	})
+	if err != nil {
+		r.failCodexJobItem(jobID, mailbox, prefix, fmt.Sprintf("短信平台初始化失败: %v", err), duration)
+		return
+	}
+	defer provider.Close()
+	progressCh := make(chan codex.LoginProgress, 32)
+	progressDone := make(chan struct{})
+	go func() {
+		defer close(progressDone)
+		for progress := range progressCh {
+			step := string(progress.Step)
+			if step == "" {
+				step = prefix + "_progress"
+			}
+			_ = r.store.MarkMailboxStep(mailbox.ID, domain.MailboxStatusLogining, step, progress.StepIndex, progress.StepTotal, proxy)
+			r.log(domain.RuntimeLog{JobID: jobID, MailboxID: mailbox.ID, Email: mailbox.Email, Level: "info", Step: step, StepIndex: progress.StepIndex, StepTotal: progress.StepTotal, Message: progress.Message})
+		}
+	}()
+	loginOpts := codex.LoginOptions{
+		Email:                    mailbox.Email,
+		Password:                 mailboxLoginPassword(mailbox),
+		Proxy:                    proxy,
+		SMSProvider:              &codexSMSProvider{provider: provider, config: smsConfig},
+		ProgressChan:             progressCh,
+		MaxPhoneAttempts:         3,
+		PasswordVerifyRetries:    codexPasswordVerifyRetries(prefix),
+		PasswordVerifyRetryDelay: 10 * time.Second,
+	}
+	result, err := codex.LoginWithCodex(ctx, loginOpts)
+	close(progressCh)
+	<-progressDone
+	duration = time.Since(started)
+	if ctx.Err() != nil {
+		_ = r.store.UpdateJobItem(jobID, mailbox.ID, "failed", "手动结束任务", duration)
+		_ = r.store.RecalculateJob(jobID, domain.JobStatusStopped)
+		return
+	}
+	if err != nil {
+		r.failCodexJobItem(jobID, mailbox, prefix, err.Error(), duration)
+		return
+	}
+	if result.PhoneNumber != "" {
+		_ = r.store.UpdateMailboxPhoneNumber(mailbox.ID, result.PhoneNumber)
+	}
+	_ = r.store.MarkMailboxLoginResult(mailbox.ID, result.TokenJSON, "")
+	_ = r.store.UpdateJobItem(jobID, mailbox.ID, "success", "", duration)
+	_ = r.store.RecalculateJob(jobID, "")
+	r.log(domain.RuntimeLog{JobID: jobID, MailboxID: mailbox.ID, Email: mailbox.Email, Level: "info", Step: "codex_complete", StepIndex: 8, StepTotal: 8, Message: "Codex 授权登录流程完成"})
+}
+
+func generateRandomPassword() string {
+	length := 16
+	upper := "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+	lower := "abcdefghijklmnopqrstuvwxyz"
+	digits := "0123456789"
+	special := "!@#$%"
+	all := upper + lower + digits + special
+	value := []byte{
+		upper[rand.Intn(len(upper))],
+		lower[rand.Intn(len(lower))],
+		digits[rand.Intn(len(digits))],
+		special[rand.Intn(len(special))],
+	}
+	for len(value) < length {
+		value = append(value, all[rand.Intn(len(all))])
+	}
+	for i := range value {
+		j := rand.Intn(i + 1)
+		value[i], value[j] = value[j], value[i]
+	}
+	return string(value)
+}
+
+func normalizeRegisterFlow(flow string) (string, error) {
+	switch strings.TrimSpace(flow) {
+	case "":
+		return domain.JobTypeRegisterLogin, nil
+	case domain.JobTypeRegister, domain.JobTypeRegisterLogin, domain.JobTypeRegisterCodex:
+		return strings.TrimSpace(flow), nil
+	default:
+		return "", fmt.Errorf("unsupported register flow: %s", flow)
+	}
+}
+
+func normalizeLoginFlow(flow string) (string, error) {
+	switch strings.TrimSpace(flow) {
+	case "":
+		return domain.JobTypeLogin, nil
+	case domain.JobTypeLogin, domain.JobTypeCodexLogin:
+		return strings.TrimSpace(flow), nil
+	default:
+		return "", fmt.Errorf("unsupported login flow: %s", flow)
+	}
+}
+
+func requireSMSConfig(settings domain.Settings, name string) (domain.SMSConfig, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return domain.SMSConfig{}, fmt.Errorf("sms_config_name is required for codex flow")
+	}
+	for _, cfg := range settings.SMSConfigs {
+		if strings.EqualFold(strings.TrimSpace(cfg.Name), name) {
+			if strings.TrimSpace(cfg.APIKey) == "" {
+				return domain.SMSConfig{}, fmt.Errorf("sms config %q missing api_key", name)
+			}
+			return cfg, nil
+		}
+	}
+	return domain.SMSConfig{}, fmt.Errorf("sms config %q not found", name)
+}
+
+func mailboxLoginPassword(mailbox domain.Mailbox) string {
+	if password := strings.TrimSpace(mailbox.RegisterPassword); password != "" {
+		return password
+	}
+	return strings.TrimSpace(mailbox.Password)
+}
+
+func codexPasswordVerifyRetries(prefix string) int {
+	if prefix == "register_codex" {
+		return 3
+	}
+	return 1
+}
+
+func (r *Runner) failCodexJobItem(jobID int64, mailbox domain.Mailbox, prefix string, message string, duration time.Duration) {
+	if prefix == "" {
+		prefix = "codex"
+	}
+	_ = r.store.MarkMailboxLoginResult(mailbox.ID, "", message)
+	_ = r.store.UpdateJobItem(jobID, mailbox.ID, "failed", message, duration)
+	_ = r.store.RecalculateJob(jobID, "")
+	r.log(domain.RuntimeLog{JobID: jobID, MailboxID: mailbox.ID, Email: mailbox.Email, Level: "error", Step: prefix + "_failed", Message: message})
+}
+
+type codexSMSProvider struct {
+	provider smsbiz.Provider
+	config   domain.SMSConfig
+}
+
+func (p *codexSMSProvider) GetNumber(ctx context.Context) (*codex.SMSActivation, error) {
+	activation, err := p.provider.GetNumber(ctx, p.config.ServiceID, p.config.CountryID, p.config.MaxPrice)
+	if err != nil {
+		return nil, err
+	}
+	return &codex.SMSActivation{
+		ID:               activation.ActivationID,
+		PhoneNumber:      activation.PhoneNumber,
+		CountryPhoneCode: activation.CountryPhoneCode,
+	}, nil
+}
+
+func (p *codexSMSProvider) PollCode(ctx context.Context, activationID string) (string, error) {
+	return smsbiz.PollForCode(ctx, p.provider, activationID, 150*time.Second, 5*time.Second)
+}
+
+func (p *codexSMSProvider) Complete(ctx context.Context, activationID string) error {
+	return p.provider.SetStatus(ctx, activationID, 6)
+}
+
+func (p *codexSMSProvider) Cancel(ctx context.Context, activationID string) error {
+	return p.provider.SetStatus(ctx, activationID, 8)
 }
 
 func (r *Runner) log(entry domain.RuntimeLog) {

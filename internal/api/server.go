@@ -12,6 +12,7 @@ import (
 	"github.com/79E/auto-openai-account/internal/domain"
 	"github.com/79E/auto-openai-account/internal/proxypool"
 	"github.com/79E/auto-openai-account/internal/runner"
+	"github.com/79E/auto-openai-account/internal/smsbiz"
 	"github.com/79E/auto-openai-account/internal/storage"
 	"github.com/79E/auto-openai-account/internal/webui"
 )
@@ -36,9 +37,31 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("/api/register-jobs", s.handleRegisterJobs)
 	mux.HandleFunc("/api/login-jobs", s.handleLoginJobs)
 	mux.HandleFunc("/api/proxy/test", s.handleProxyTest)
+	mux.HandleFunc("/api/sms/catalog", s.handleSMSCatalog)
 	mux.HandleFunc("/api/stats", s.handleStats)
 	mux.Handle("/", webui.Handler())
 	return mux
+}
+
+func (s *Server) handleSMSCatalog(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	var body struct {
+		Platform string `json:"platform"`
+		APIKey   string `json:"api_key"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid json body"))
+		return
+	}
+	catalog, err := smsbiz.FetchCatalog(r.Context(), body.Platform, body.APIKey)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, catalog)
 }
 
 func (s *Server) handleProxyTest(w http.ResponseWriter, r *http.Request) {
@@ -234,7 +257,7 @@ func (s *Server) handleMailboxLogin(w http.ResponseWriter, r *http.Request, id i
 		writeError(w, http.StatusNotFound, fmt.Errorf("mailbox not found"))
 		return
 	}
-	job, err := s.runner.StartLogin([]int64{mailbox.ID})
+	job, err := s.runner.StartLogin([]int64{mailbox.ID}, "", "")
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err)
 		return
@@ -248,13 +271,15 @@ func (s *Server) handleLoginJobs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
-		MailboxIDs []int64 `json:"mailbox_ids"`
+		MailboxIDs    []int64 `json:"mailbox_ids"`
+		Flow          string  `json:"flow"`
+		SMSConfigName string  `json:"sms_config_name"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid json body"))
 		return
 	}
-	job, err := s.runner.StartLogin(body.MailboxIDs)
+	job, err := s.runner.StartLogin(body.MailboxIDs, body.Flow, body.SMSConfigName)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err)
 		return
@@ -276,13 +301,15 @@ func (s *Server) handleRegisterJobs(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 200, result)
 	case http.MethodPost:
 		var body struct {
-			Count int `json:"count"`
+			Count         int    `json:"count"`
+			Flow          string `json:"flow"`
+			SMSConfigName string `json:"sms_config_name"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			writeError(w, 400, fmt.Errorf("invalid json body"))
 			return
 		}
-		job, err := s.runner.Start(body.Count)
+		job, err := s.runner.Start(body.Count, body.Flow, body.SMSConfigName)
 		if err != nil {
 			writeError(w, 400, err)
 			return

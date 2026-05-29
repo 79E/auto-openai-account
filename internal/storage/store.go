@@ -49,7 +49,8 @@ func (s *Store) init() error {
 	stmts := []string{
 		`PRAGMA journal_mode=WAL`, `PRAGMA synchronous=NORMAL`, `PRAGMA busy_timeout=5000`,
 		`CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TEXT NOT NULL)`,
-		`CREATE TABLE IF NOT EXISTS mailboxes (id INTEGER PRIMARY KEY AUTOINCREMENT, email TEXT NOT NULL UNIQUE, password TEXT NOT NULL, client_id TEXT, access_token TEXT, status TEXT NOT NULL DEFAULT 'new', register_password TEXT, token_json TEXT, remark TEXT, last_error TEXT, current_step TEXT, current_step_index INTEGER NOT NULL DEFAULT 0, current_step_total INTEGER NOT NULL DEFAULT 0, proxy TEXT, registered_at TEXT, last_login_at TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`,
+		`CREATE TABLE IF NOT EXISTS mailboxes (id INTEGER PRIMARY KEY AUTOINCREMENT, email TEXT NOT NULL UNIQUE, password TEXT NOT NULL, client_id TEXT, access_token TEXT, status TEXT NOT NULL DEFAULT 'new', register_password TEXT, token_json TEXT, remark TEXT, last_error TEXT, current_step TEXT, current_step_index INTEGER NOT NULL DEFAULT 0, current_step_total INTEGER NOT NULL DEFAULT 0, proxy TEXT, registered_at TEXT, last_login_at TEXT, phone_number TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`,
+		`ALTER TABLE mailboxes ADD COLUMN phone_number TEXT`,
 		`CREATE INDEX IF NOT EXISTS idx_mailboxes_status_id ON mailboxes (status, id)`,
 		`CREATE TABLE IF NOT EXISTS register_jobs (id INTEGER PRIMARY KEY AUTOINCREMENT, status TEXT NOT NULL, requested_count INTEGER NOT NULL, total_count INTEGER NOT NULL, success_count INTEGER NOT NULL DEFAULT 0, failed_count INTEGER NOT NULL DEFAULT 0, success_rate REAL NOT NULL DEFAULT 0, avg_duration_ms INTEGER NOT NULL DEFAULT 0, total_duration_ms INTEGER NOT NULL DEFAULT 0, started_at TEXT, finished_at TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`,
 		`ALTER TABLE register_jobs ADD COLUMN type TEXT NOT NULL DEFAULT 'register'`,
@@ -172,7 +173,7 @@ func (s *Store) ListMailboxes(status string, page, pageSize int) (domain.Mailbox
 		return domain.MailboxListResult{}, err
 	}
 	args = append(args, pageSize, (page-1)*pageSize)
-	rows, err := s.db.Query(`SELECT m.id,m.email,m.password,m.client_id,m.access_token,m.status,m.register_password,m.token_json,m.remark,m.last_error,m.current_step,m.current_step_index,m.current_step_total,m.proxy,m.registered_at,m.last_login_at,m.created_at,m.updated_at, COALESCE(j.id,0), COALESCE(j.type,''), COALESCE(ji.status,''), COALESCE(ji.error,'') FROM mailboxes m LEFT JOIN register_job_items ji ON ji.id = (SELECT id FROM register_job_items WHERE mailbox_id = m.id ORDER BY id DESC LIMIT 1) LEFT JOIN register_jobs j ON j.id = ji.job_id`+strings.Replace(where, "status", "m.status", 1)+` ORDER BY m.id DESC LIMIT ? OFFSET ?`, args...)
+	rows, err := s.db.Query(`SELECT m.id,m.email,m.password,m.client_id,m.access_token,m.status,m.register_password,m.token_json,m.remark,m.last_error,m.current_step,m.current_step_index,m.current_step_total,m.proxy,m.registered_at,m.last_login_at,m.phone_number,m.created_at,m.updated_at, COALESCE(j.id,0), COALESCE(j.type,''), COALESCE(ji.status,''), COALESCE(ji.error,'') FROM mailboxes m LEFT JOIN register_job_items ji ON ji.id = (SELECT id FROM register_job_items WHERE mailbox_id = m.id ORDER BY id DESC LIMIT 1) LEFT JOIN register_jobs j ON j.id = ji.job_id`+strings.Replace(where, "status", "m.status", 1)+` ORDER BY m.id DESC LIMIT ? OFFSET ?`, args...)
 	if err != nil {
 		return domain.MailboxListResult{}, err
 	}
@@ -194,7 +195,7 @@ func (s *Store) CountMailboxesByStatus(status string) (int, error) {
 	return c, err
 }
 func (s *Store) GetMailbox(id int64) (domain.Mailbox, bool, error) {
-	row := s.db.QueryRow(`SELECT m.id,m.email,m.password,m.client_id,m.access_token,m.status,m.register_password,m.token_json,m.remark,m.last_error,m.current_step,m.current_step_index,m.current_step_total,m.proxy,m.registered_at,m.last_login_at,m.created_at,m.updated_at, COALESCE(j.id,0), COALESCE(j.type,''), COALESCE(ji.status,''), COALESCE(ji.error,'') FROM mailboxes m LEFT JOIN register_job_items ji ON ji.id = (SELECT id FROM register_job_items WHERE mailbox_id = m.id ORDER BY id DESC LIMIT 1) LEFT JOIN register_jobs j ON j.id = ji.job_id WHERE m.id = ?`, id)
+	row := s.db.QueryRow(`SELECT m.id,m.email,m.password,m.client_id,m.access_token,m.status,m.register_password,m.token_json,m.remark,m.last_error,m.current_step,m.current_step_index,m.current_step_total,m.proxy,m.registered_at,m.last_login_at,m.phone_number,m.created_at,m.updated_at, COALESCE(j.id,0), COALESCE(j.type,''), COALESCE(ji.status,''), COALESCE(ji.error,'') FROM mailboxes m LEFT JOIN register_job_items ji ON ji.id = (SELECT id FROM register_job_items WHERE mailbox_id = m.id ORDER BY id DESC LIMIT 1) LEFT JOIN register_jobs j ON j.id = ji.job_id WHERE m.id = ?`, id)
 	item, err := scanMailbox(row)
 	if err == sql.ErrNoRows {
 		return domain.Mailbox{}, false, nil
@@ -258,7 +259,7 @@ func (s *Store) UpdateMailbox(id int64, updates map[string]any) (domain.Mailbox,
 }
 
 func (s *Store) PickNewMailboxes(limit int) ([]domain.Mailbox, error) {
-	rows, err := s.db.Query(`SELECT m.id,m.email,m.password,m.client_id,m.access_token,m.status,m.register_password,m.token_json,m.remark,m.last_error,m.current_step,m.current_step_index,m.current_step_total,m.proxy,m.registered_at,m.last_login_at,m.created_at,m.updated_at, COALESCE(j.id,0), COALESCE(j.type,''), COALESCE(ji.status,''), COALESCE(ji.error,'') FROM mailboxes m LEFT JOIN register_job_items ji ON ji.id = (SELECT id FROM register_job_items WHERE mailbox_id = m.id ORDER BY id DESC LIMIT 1) LEFT JOIN register_jobs j ON j.id = ji.job_id WHERE m.status=? ORDER BY m.id ASC LIMIT ?`, domain.MailboxStatusNew, limit)
+	rows, err := s.db.Query(`SELECT m.id,m.email,m.password,m.client_id,m.access_token,m.status,m.register_password,m.token_json,m.remark,m.last_error,m.current_step,m.current_step_index,m.current_step_total,m.proxy,m.registered_at,m.last_login_at,m.phone_number,m.created_at,m.updated_at, COALESCE(j.id,0), COALESCE(j.type,''), COALESCE(ji.status,''), COALESCE(ji.error,'') FROM mailboxes m LEFT JOIN register_job_items ji ON ji.id = (SELECT id FROM register_job_items WHERE mailbox_id = m.id ORDER BY id DESC LIMIT 1) LEFT JOIN register_jobs j ON j.id = ji.job_id WHERE m.status=? ORDER BY m.id ASC LIMIT ?`, domain.MailboxStatusNew, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -301,6 +302,11 @@ func (s *Store) MarkMailboxLoginResult(id int64, tokenJSON string, errMessage st
 
 func (s *Store) MarkMailboxAbnormal(id int64, message string) error {
 	_, err := s.db.Exec(`UPDATE mailboxes SET status=?, last_error=?, updated_at=? WHERE id=?`, domain.MailboxStatusAbnormal, message, now(), id)
+	return err
+}
+
+func (s *Store) UpdateMailboxPhoneNumber(id int64, phoneNumber string) error {
+	_, err := s.db.Exec(`UPDATE mailboxes SET phone_number=?, updated_at=? WHERE id=?`, phoneNumber, now(), id)
 	return err
 }
 
@@ -501,10 +507,10 @@ func (s *Store) ListLogs(jobID int64, afterID int64, limit int) ([]domain.Runtim
 
 func scanMailbox(scanner interface{ Scan(dest ...any) error }) (domain.Mailbox, error) {
 	var i domain.Mailbox
-	var clientID, accessToken, registerPassword, tokenJSON, remark, lastError, step, proxy, registeredAt, lastLoginAt sql.NullString
+	var clientID, accessToken, registerPassword, tokenJSON, remark, lastError, step, proxy, registeredAt, lastLoginAt, phoneNumber sql.NullString
 	var lastJobType, lastJobStatus, lastJobError sql.NullString
 	var lastJobID sql.NullInt64
-	err := scanner.Scan(&i.ID, &i.Email, &i.Password, &clientID, &accessToken, &i.Status, &registerPassword, &tokenJSON, &remark, &lastError, &step, &i.CurrentStepIndex, &i.CurrentStepTotal, &proxy, &registeredAt, &lastLoginAt, &i.CreatedAt, &i.UpdatedAt, &lastJobID, &lastJobType, &lastJobStatus, &lastJobError)
+	err := scanner.Scan(&i.ID, &i.Email, &i.Password, &clientID, &accessToken, &i.Status, &registerPassword, &tokenJSON, &remark, &lastError, &step, &i.CurrentStepIndex, &i.CurrentStepTotal, &proxy, &registeredAt, &lastLoginAt, &phoneNumber, &i.CreatedAt, &i.UpdatedAt, &lastJobID, &lastJobType, &lastJobStatus, &lastJobError)
 	i.ClientID = nullString(clientID)
 	i.AccessToken = nullString(accessToken)
 	i.RegisterPassword = nullString(registerPassword)
@@ -515,6 +521,7 @@ func scanMailbox(scanner interface{ Scan(dest ...any) error }) (domain.Mailbox, 
 	i.Proxy = nullString(proxy)
 	i.RegisteredAt = nullString(registeredAt)
 	i.LastLoginAt = nullString(lastLoginAt)
+	i.PhoneNumber = nullString(phoneNumber)
 	if lastJobID.Valid {
 		i.LastJobID = lastJobID.Int64
 	}

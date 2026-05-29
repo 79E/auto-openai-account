@@ -14,22 +14,35 @@ const (
 	JobStatusStopped  = "stopped"
 	JobStatusFailed   = "failed"
 
-	JobTypeRegister = "register"
-	JobTypeLogin    = "login"
+	JobTypeRegister      = "register"
+	JobTypeRegisterLogin = "register_login"
+	JobTypeRegisterCodex = "register_codex"
+	JobTypeLogin         = "login"
+	JobTypeCodexLogin    = "codex_login"
 )
 
+type SMSConfig struct {
+	Name      string  `json:"name"`
+	Platform  string  `json:"platform"`
+	APIKey    string  `json:"api_key"`
+	ServiceID string  `json:"service_id"`
+	CountryID int     `json:"country_id"`
+	MaxPrice  float64 `json:"max_price"`
+}
+
 type Settings struct {
-	ProxyMode              string   `json:"proxy_mode"`
-	Proxies                []string `json:"proxies"`
-	PasswordMode           string   `json:"password_mode"`
-	FixedPassword          string   `json:"fixed_password"`
-	RegisterConcurrency    int      `json:"register_concurrency"`
-	OTPTimeoutSeconds      int      `json:"otp_timeout_seconds"`
-	OTPPollIntervalSeconds int      `json:"otp_poll_interval_seconds"`
-	IMAPHost               string   `json:"imap_host"`
-	IMAPPort               int      `json:"imap_port"`
-	IMAPAuthMode           string   `json:"imap_auth_mode"`
-	Listen                 string   `json:"listen"`
+	ProxyMode              string      `json:"proxy_mode"`
+	Proxies                []string    `json:"proxies"`
+	PasswordMode           string      `json:"password_mode"`
+	FixedPassword          string      `json:"fixed_password"`
+	RegisterConcurrency    int         `json:"register_concurrency"`
+	OTPTimeoutSeconds      int         `json:"otp_timeout_seconds"`
+	OTPPollIntervalSeconds int         `json:"otp_poll_interval_seconds"`
+	IMAPHost               string      `json:"imap_host"`
+	IMAPPort               int         `json:"imap_port"`
+	IMAPAuthMode           string      `json:"imap_auth_mode"`
+	Listen                 string      `json:"listen"`
+	SMSConfigs             []SMSConfig `json:"sms_configs"`
 }
 
 type Mailbox struct {
@@ -50,6 +63,7 @@ type Mailbox struct {
 	Proxy            string `json:"proxy,omitempty"`
 	RegisteredAt     string `json:"registered_at,omitempty"`
 	LastLoginAt      string `json:"last_login_at,omitempty"`
+	PhoneNumber      string `json:"phone_number,omitempty"`
 	LastJobID        int64  `json:"last_job_id,omitempty"`
 	LastJobType      string `json:"last_job_type,omitempty"`
 	LastJobStatus    string `json:"last_job_status,omitempty"`
@@ -123,6 +137,9 @@ func NormalizeSettings(s Settings) Settings {
 	if s.Proxies == nil {
 		s.Proxies = []string{}
 	}
+	if s.SMSConfigs == nil {
+		s.SMSConfigs = []SMSConfig{}
+	}
 	if s.ProxyMode != "local" && s.ProxyMode != "single" && s.ProxyMode != "round_robin" {
 		s.ProxyMode = "random"
 	}
@@ -152,6 +169,17 @@ func NormalizeSettings(s Settings) Settings {
 	}
 	if s.Listen == "" {
 		s.Listen = ":8080"
+	}
+	for i := range s.SMSConfigs {
+		if s.SMSConfigs[i].Platform == "" {
+			s.SMSConfigs[i].Platform = "smsbower"
+		}
+		if s.SMSConfigs[i].ServiceID == "" {
+			s.SMSConfigs[i].ServiceID = "dr"
+		}
+		if s.SMSConfigs[i].CountryID <= 0 {
+			s.SMSConfigs[i].CountryID = 38
+		}
 	}
 	return s
 }
