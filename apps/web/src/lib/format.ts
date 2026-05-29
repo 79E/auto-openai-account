@@ -1,7 +1,15 @@
 import type { Job, Mailbox } from "../types";
 
 export function jobTypeText(type?: string) {
-  return type === "login" ? "登录" : "注册";
+  return type === "login"
+    ? "普通登录"
+    : type === "codex_login"
+      ? "Codex授权登录"
+      : type === "register_login"
+        ? "注册+普通登录"
+        : type === "register_codex"
+          ? "注册+普通登录+Codex授权"
+          : "注册";
 }
 
 export function jobStatusText(status?: string) {

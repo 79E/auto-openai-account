@@ -1,7 +1,7 @@
-import { PlugZap } from "lucide-react";
+import { Link } from "react-router-dom";
+import { MessageSquareText, PlugZap } from "lucide-react";
 import { Badge } from "../../components/Badge/Badge";
 import { Card } from "../../components/Card/Card";
-import styles from "./PluginsPage.module.css";
 
 export function PluginsPage() {
   const plugins = [
@@ -25,7 +25,22 @@ export function PluginsPage() {
       status: "已实现",
       desc: "负责代理池、测速和任务代理选择。",
     },
+    {
+      name: "sms-provider",
+      status: "已接入",
+      desc: "负责 Hero SMS 和 SMSBower 手机号获取与短信验证码轮询。",
+      action: (
+        <Link
+          to="/sms"
+          className="inline-flex items-center gap-2 rounded-xl border bg-white px-3 py-2 text-sm font-bold"
+        >
+          <MessageSquareText size={16} />
+          SMS 配置
+        </Link>
+      ),
+    },
   ];
+
   return (
     <div className="space-y-4">
       <Card title="插件列表" icon={<PlugZap size={18} />}>
@@ -33,7 +48,7 @@ export function PluginsPage() {
       </Card>
       <div className="grid gap-3 md:grid-cols-2">
         {plugins.map((p) => (
-          <Card key={p.name} title={p.name} icon={<PlugZap size={18} />}>
+          <Card key={p.name} title={p.name} icon={<PlugZap size={18} />} actions={p.action}>
             <div className="mb-3">
               <Badge status="success" text={p.status} />
             </div>

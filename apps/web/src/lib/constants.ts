@@ -8,6 +8,7 @@ export const nav: Array<{ path: string; label: string; end?: boolean }> = [
   { path: "/mailboxes", label: "邮箱池" },
   { path: "/jobs", label: "任务" },
   { path: "/proxies", label: "代理池" },
+  { path: "/sms", label: "SMS 配置" },
   { path: "/plugins", label: "插件" },
 ];
 export const routeTitles: Record<string, string> = {
@@ -15,6 +16,6 @@ export const routeTitles: Record<string, string> = {
   "/mailboxes": "邮箱池",
   "/jobs": "任务",
   "/proxies": "代理池",
+  "/sms": "SMS 配置",
   "/plugins": "插件",
 };
-

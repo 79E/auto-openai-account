@@ -19,6 +19,7 @@ export type Mailbox = {
   current_step_index?: number;
   current_step_total?: number;
   proxy?: string;
+  phone_number?: string;
   last_error?: string;
   last_job_id?: number;
   last_job_type?: string;
@@ -66,6 +67,34 @@ export type RuntimeLog = {
   created_at: string;
 };
 
+export type SMSConfig = {
+  name: string;
+  platform: string;
+  api_key: string;
+  service_id: string;
+  country_id: number;
+  max_price: number;
+};
+
+export type SMSCatalogService = {
+  code: string;
+  name: string;
+};
+
+export type SMSCatalogCountry = {
+  id: number;
+  rus?: string;
+  eng?: string;
+  chn?: string;
+  visible?: number;
+  retry?: number;
+};
+
+export type SMSCatalog = {
+  services: SMSCatalogService[];
+  countries: SMSCatalogCountry[];
+};
+
 export type SettingsPayload = {
   proxy_mode: string;
   proxies: string[];
@@ -78,6 +107,7 @@ export type SettingsPayload = {
   otp_timeout_seconds: number;
   otp_poll_interval_seconds: number;
   listen: string;
+  sms_configs: SMSConfig[];
 };
 
 export type ProxyTestResult = {
@@ -98,4 +128,3 @@ export type TokenExportConfirm = {
   count: number;
   items: JobTokenExportItem[];
 } | null;
-

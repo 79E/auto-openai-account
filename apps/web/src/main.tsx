@@ -13,6 +13,7 @@ import { MailboxesPage } from "./pages/MailboxesPage/MailboxesPage";
 import { Overview } from "./pages/Overview/Overview";
 import { PluginsPage } from "./pages/PluginsPage/PluginsPage";
 import { ProxyPoolPage } from "./pages/ProxyPoolPage/ProxyPoolPage";
+import { SmsSettingsPage } from "./pages/SmsSettingsPage/SmsSettingsPage";
 import type { Job, JobTokenExportItem, Mailbox, MailboxUpdate, RuntimeLog, SettingsPayload, Stats, ToastState, TokenExportConfirm } from "./types";
 import "./styles.css";
 import styles from "./App.module.css";
@@ -245,13 +246,18 @@ function App() {
     }
   }
 
-  async function createRegisterTask(config: SettingsPayload, count: number) {
+  async function createRegisterTask(
+    config: SettingsPayload,
+    count: number,
+    flow = "register_login",
+    smsConfigName = "",
+  ) {
     setBusy(true);
     try {
       await saveSettings(config);
       const job = await api<Job>("/api/register-jobs", {
         method: "POST",
-        body: JSON.stringify({ count }),
+        body: JSON.stringify({ count, flow, sms_config_name: smsConfigName }),
       });
       setActiveJob(job);
       setTaskOpen(false);
@@ -267,14 +273,19 @@ function App() {
     }
   }
 
-  async function createLoginTask(config: SettingsPayload, ids: number[]) {
+  async function createLoginTask(
+    config: SettingsPayload,
+    ids: number[],
+    flow = "login",
+    smsConfigName = "",
+  ) {
     if (ids.length === 0) return;
     setBusy(true);
     try {
       await saveSettings(config);
       const job = await api<Job>("/api/login-jobs", {
         method: "POST",
-        body: JSON.stringify({ mailbox_ids: ids }),
+        body: JSON.stringify({ mailbox_ids: ids, flow, sms_config_name: smsConfigName }),
       });
       setActiveJob(job);
       setTaskOpen(false);
@@ -605,7 +616,36 @@ function App() {
               ) : null
             }
           />
-          <Route path="/plugins" element={<PluginsPage />} />
+          <Route
+            path="/plugins"
+            element={
+              <PluginsPage />
+            }
+          />
+          <Route
+            path="/sms"
+            element={
+              settingsDraft ? (
+                <SmsSettingsPage
+                  settingsDraft={settingsDraft}
+                  setSettingsDraft={setSettingsDraft}
+                  saveSettings={async (next) => {
+                    try {
+                      await saveSettings(next);
+                      showToast("SMS 配置已更新", "success");
+                    } catch (e) {
+                      showToast(
+                        e instanceof Error ? e.message : "保存失败",
+                        "error",
+                      );
+                      throw e;
+                    }
+                  }}
+                  busy={busy}
+                />
+              ) : null
+            }
+          />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </div>

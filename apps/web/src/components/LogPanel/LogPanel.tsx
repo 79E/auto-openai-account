@@ -15,7 +15,7 @@ export function LogPanel({
 }) {
   return (
     <Card
-      title={activeJob ? `任务 #${activeJob.id} 邮箱注册实时日志` : "邮箱注册实时日志"}
+      title={activeJob ? `任务 #${activeJob.id} 实时日志` : "实时日志"}
       icon={<Database size={18} />}
       className="min-h-0"
     >

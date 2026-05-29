@@ -51,6 +51,7 @@ export function MailboxDetailModal({
               : "-"
           }
         />
+        <InfoRow label="绑定手机号" value={detail.phone_number || "-"} />
         <InfoRow
           label="失败信息"
           value={detail.last_job_error || detail.last_error || "-"}

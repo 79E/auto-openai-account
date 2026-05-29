@@ -4,6 +4,12 @@ import type { Mailbox, SettingsPayload } from "../../types";
 import { Field } from "../Field/Field";
 import styles from "./CreateTaskModal.module.css";
 
+type TaskFlow =
+  | "register_login"
+  | "register_codex"
+  | "login"
+  | "codex_login";
+
 export function CreateTaskModal({
   settings,
   mailboxes,
@@ -16,30 +22,64 @@ export function CreateTaskModal({
   mailboxes: Mailbox[];
   busy: boolean;
   onClose: () => void;
-  onCreateRegister: (settings: SettingsPayload, count: number) => void;
-  onCreateLogin: (settings: SettingsPayload, ids: number[]) => void;
+  onCreateRegister: (
+    settings: SettingsPayload,
+    count: number,
+    flow: TaskFlow,
+    smsConfigName: string,
+  ) => void;
+  onCreateLogin: (
+    settings: SettingsPayload,
+    ids: number[],
+    flow: TaskFlow,
+    smsConfigName: string,
+  ) => void;
 }) {
   const unused = mailboxes.filter((item) => item.status === "new");
-  const used = mailboxes.filter((item) => item.status !== "new");
-  const [taskType, setTaskType] = useState<"register" | "login">("register");
+  const used = mailboxes.filter(
+    (item) => item.status !== "new" && Boolean(item.register_password || item.password),
+  );
+  const [flow, setFlow] = useState<TaskFlow>("register_login");
   const [draft, setDraft] = useState<SettingsPayload>({
     ...settings,
     fixed_password: settings.fixed_password || defaultPassword,
+    sms_configs: settings.sms_configs || [],
   });
   const [count, setCount] = useState(Math.min(1, unused.length));
   const [loginFilter, setLoginFilter] = useState("used");
+  const [smsConfigName, setSMSConfigName] = useState(
+    draft.sms_configs[0]?.name || "",
+  );
+  const isRegisterFlow = ["register_login", "register_codex"].includes(flow);
+  const isCodexFlow = flow === "register_codex" || flow === "codex_login";
   const loginCandidates = used.filter(
     (item) => loginFilter === "used" || item.status === loginFilter,
   );
+  const selectedSMSExists =
+    !isCodexFlow ||
+    draft.sms_configs.some((config) => config.name.trim() === smsConfigName.trim());
   function submit() {
-    if (taskType === "register")
-      onCreateRegister(draft, Math.max(1, Math.min(count, unused.length)));
+    if (isRegisterFlow)
+      onCreateRegister(
+        draft,
+        Math.max(1, Math.min(count, unused.length)),
+        flow,
+        smsConfigName,
+      );
     else
       onCreateLogin(
         draft,
         loginCandidates.map((item) => item.id),
+        flow,
+        smsConfigName,
       );
   }
+  const flowOptions: { value: TaskFlow; label: string }[] = [
+    { value: "register_login", label: "注册 + 普通登录" },
+    { value: "register_codex", label: "注册 + 普通登录 + Codex 授权登录" },
+    { value: "login", label: "普通登录" },
+    { value: "codex_login", label: "Codex 授权登录" },
+  ];
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-3 backdrop-blur-sm">
       <div className="w-full max-w-3xl rounded-2xl border bg-white p-4 shadow-soft">
@@ -57,27 +97,21 @@ export function CreateTaskModal({
             关闭
           </button>
         </div>
-        <div className="mb-3 flex gap-2">
-          <button
-            onClick={() => setTaskType("register")}
-            className={
-              taskType === "register"
-                ? "rounded-xl bg-slate-950 px-3 py-1.5 font-bold text-white"
-                : "rounded-xl border bg-white px-3 py-1.5 font-bold"
-            }
-          >
-            注册任务
-          </button>
-          <button
-            onClick={() => setTaskType("login")}
-            className={
-              taskType === "login"
-                ? "rounded-xl bg-slate-950 px-3 py-1.5 font-bold text-white"
-                : "rounded-xl border bg-white px-3 py-1.5 font-bold"
-            }
-          >
-            登录换 token
-          </button>
+        <div className="mb-3 flex flex-wrap gap-2">
+          {flowOptions.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              onClick={() => setFlow(option.value)}
+              className={
+                flow === option.value
+                  ? "rounded-xl bg-slate-950 px-3 py-1.5 font-bold text-white"
+                  : "rounded-xl border bg-white px-3 py-1.5 font-bold"
+              }
+            >
+              {option.label}
+            </button>
+          ))}
         </div>
         <div className="grid gap-3 md:grid-cols-2">
           <Field label="并发数量">
@@ -109,7 +143,7 @@ export function CreateTaskModal({
             </select>
           </Field>
         </div>
-        {taskType === "register" && (
+        {isRegisterFlow && (
           <div className="mt-3 grid gap-3 md:grid-cols-2">
             <Field label={`注册数量（可用未使用邮箱 ${unused.length} 个）`}>
               <input
@@ -146,7 +180,7 @@ export function CreateTaskModal({
             )}
           </div>
         )}
-        {taskType === "login" && (
+        {!isRegisterFlow && (
           <div className="mt-3 grid gap-3 md:grid-cols-1">
             <Field label="邮箱状态筛选">
               <select
@@ -167,6 +201,29 @@ export function CreateTaskModal({
             </Field>
           </div>
         )}
+        {isCodexFlow && (
+          <div className="mt-3">
+            <Field label="SMS 配置">
+              <select
+                className={`${styles.input} ${styles.selectInput}`}
+                value={smsConfigName}
+                onChange={(e) => setSMSConfigName(e.target.value)}
+              >
+                <option value="">请选择 SMS 配置</option>
+                {draft.sms_configs.map((config) => (
+                  <option key={config.name} value={config.name}>
+                    {config.name} · {config.platform}
+                  </option>
+                ))}
+              </select>
+              {!selectedSMSExists && (
+                <p className="mt-2 text-sm font-semibold text-rose-600">
+                  Codex 流程必须选择有效的 SMS 配置。
+                </p>
+              )}
+            </Field>
+          </div>
+        )}
         <div className="mt-4 flex justify-end gap-2">
           <button
             onClick={onClose}
@@ -178,9 +235,8 @@ export function CreateTaskModal({
             onClick={submit}
             disabled={
               busy ||
-              (taskType === "register"
-                ? unused.length === 0
-                : loginCandidates.length === 0)
+              (isRegisterFlow ? unused.length === 0 : loginCandidates.length === 0) ||
+              !selectedSMSExists
             }
             className="rounded-xl bg-slate-950 px-3 py-2 font-bold text-white disabled:opacity-50"
           >
