@@ -14,7 +14,7 @@ import { Overview } from "./pages/Overview/Overview";
 import { PluginsPage } from "./pages/PluginsPage/PluginsPage";
 import { ProxyPoolPage } from "./pages/ProxyPoolPage/ProxyPoolPage";
 import { SmsSettingsPage } from "./pages/SmsSettingsPage/SmsSettingsPage";
-import type { Job, JobTokenExportItem, Mailbox, MailboxUpdate, RuntimeLog, SettingsPayload, Stats, ToastState, TokenExportConfirm } from "./types";
+import type { Job, JobTokenExportItem, Mailbox, MailboxUpdate, RuntimeLog, SaveSettingsOptions, SettingsPayload, Stats, ToastState, TokenExportConfirm } from "./types";
 import "./styles.css";
 import styles from "./App.module.css";
 
@@ -214,8 +214,9 @@ function App() {
     return () => source.close();
   }, [latestJob?.id, latestJob?.status, activeJob?.id]);
 
-  async function saveSettings(next: SettingsPayload) {
-    const saved = await api<{ settings: SettingsPayload }>("/api/settings", {
+  async function saveSettings(next: SettingsPayload, options?: SaveSettingsOptions) {
+    const query = options?.syncPoolMaxUseCount ? "?sync_pool_max_use_count=1" : "";
+    const saved = await api<{ settings: SettingsPayload }>(`/api/settings${query}`, {
       method: "PUT",
       body: JSON.stringify(normalizeSettingsPayload(next)),
     });

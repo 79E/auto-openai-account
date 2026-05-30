@@ -24,6 +24,7 @@ type CodexSMSActivation struct {
 
 type CodexSMSProvider interface {
 	GetNumber(context.Context) (*CodexSMSActivation, error)
+	MarkSubmitted(context.Context, string) error
 	PollCode(context.Context, string) (string, error)
 	Complete(context.Context, string) error
 	Cancel(context.Context, string) error
@@ -334,6 +335,12 @@ func (w *worker) codexBindPhone(ctx context.Context, provider CodexSMSProvider, 
 			_ = provider.Cancel(ctx, activation.ID)
 			lastErr = fmt.Errorf("submit_phone_http_%d%s", status, responseDetail(payload))
 			progress("add_phone", 4, 8, phoneRetryMessage(attempt, maxAttempts, "手机号被 OpenAI 拒绝："+phoneSubmitFailureReason(status, payload)))
+			continue
+		}
+		if err := provider.MarkSubmitted(ctx, activation.ID); err != nil {
+			_ = provider.Cancel(ctx, activation.ID)
+			lastErr = fmt.Errorf("mark_phone_submitted_failed: %w", err)
+			progress("add_phone", 4, 8, phoneRetryMessage(attempt, maxAttempts, fmt.Sprintf("记录手机号提交状态失败：%v", err)))
 			continue
 		}
 

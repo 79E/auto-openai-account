@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"time"
+
+	"github.com/79E/auto-openai-account/internal/domain"
 )
 
 type Activation struct {
@@ -37,21 +39,41 @@ const (
 
 type Provider interface {
 	GetNumber(ctx context.Context, serviceID string, countryID int, maxPrice float64) (*Activation, error)
+	MarkSubmitted(ctx context.Context, activationID string) error
 	GetStatus(ctx context.Context, activationID string) (*SMSCodeResult, error)
 	SetStatus(ctx context.Context, activationID string, status int) error
 	Close()
 }
 
+type PhonePoolStore interface {
+	ReserveNextPhonePoolItem(configID string) (domain.PhonePoolItem, error)
+	GetPhonePoolItem(id int64) (domain.PhonePoolItem, error)
+	MarkPhonePoolItemSubmitted(itemID int64, jobID int64, mailboxID int64) error
+	CompletePhonePoolItem(itemID int64) error
+	ReleasePhonePoolItem(itemID int64, errMessage string) error
+	FailPhonePoolItem(itemID int64, disable bool, errMessage string) error
+	CreatePhonePoolAttempt(itemID int64, configID string, jobID int64, mailboxID int64, phoneNumber string) (int64, error)
+	FinishPhonePoolAttempt(attemptID int64, result string, errorCode string, errorMessage string, verificationCode string) error
+}
+
 type Config struct {
-	Platform  string
-	APIKey    string
-	ServiceID string
-	CountryID int
-	MaxPrice  float64
+	Platform         string
+	APIKey           string
+	ServiceID        string
+	CountryID        int
+	MaxPrice         float64
+	SMSConfigID      string
+	MaxUsagePerPhone int
+	DisableOnError   string
+	Store            PhonePoolStore
+	JobID            int64
+	MailboxID        int64
 }
 
 func NewProvider(cfg Config) (Provider, error) {
 	switch cfg.Platform {
+	case "custom", "pool":
+		return NewPhonePool(cfg)
 	case "hero", "hero-sms", "herosms":
 		return NewHeroSMS(cfg), nil
 	case "smsbower", "bower":

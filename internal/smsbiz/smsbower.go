@@ -123,6 +123,10 @@ func (s *SMSBower) GetStatus(ctx context.Context, activationID string) (*SMSCode
 	return parseSMSStatusResponse(string(body))
 }
 
+func (s *SMSBower) MarkSubmitted(ctx context.Context, activationID string) error {
+	return nil
+}
+
 func (s *SMSBower) SetStatus(ctx context.Context, activationID string, status int) error {
 	params := url.Values{}
 	params.Set("api_key", s.apiKey)

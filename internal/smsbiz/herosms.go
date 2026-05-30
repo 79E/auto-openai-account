@@ -124,6 +124,10 @@ func (h *HeroSMS) GetStatus(ctx context.Context, activationID string) (*SMSCodeR
 	return parseSMSStatusResponse(string(body))
 }
 
+func (h *HeroSMS) MarkSubmitted(ctx context.Context, activationID string) error {
+	return nil
+}
+
 func (h *HeroSMS) SetStatus(ctx context.Context, activationID string, status int) error {
 	params := url.Values{}
 	params.Set("api_key", h.apiKey)

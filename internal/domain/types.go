@@ -14,6 +14,18 @@ const (
 	MailboxStatusLogining    = "logining"
 	MailboxStatusAbnormal    = "abnormal"
 
+	SMSConfigTypeProvider = "provider"
+	SMSConfigTypePool     = "pool"
+
+	SMSDisableOnPermanentOnly = "permanent_only"
+	SMSDisableOnAnyFailure    = "any_failure"
+
+	PhonePoolStatusReady    = "ready"
+	PhonePoolStatusReserved = "reserved"
+	PhonePoolStatusUsedUp   = "used_up"
+	PhonePoolStatusDisabled = "disabled"
+	PhonePoolStatusError    = "error"
+
 	DefaultFixedPassword = "Mima1234567890."
 
 	JobStatusRunning  = "running"
@@ -29,13 +41,65 @@ const (
 )
 
 type SMSConfig struct {
-	ID        string  `json:"id"`
-	Name      string  `json:"name"`
-	Platform  string  `json:"platform"`
-	APIKey    string  `json:"api_key"`
-	ServiceID string  `json:"service_id"`
-	CountryID int     `json:"country_id"`
-	MaxPrice  float64 `json:"max_price"`
+	ID               string          `json:"id"`
+	Name             string          `json:"name"`
+	Type             string          `json:"type"`
+	Platform         string          `json:"platform"`
+	PlatformLabel    string          `json:"platform_label,omitempty"`
+	APIKey           string          `json:"api_key,omitempty"`
+	ServiceID        string          `json:"service_id,omitempty"`
+	CountryID        int             `json:"country_id,omitempty"`
+	MaxPrice         float64         `json:"max_price,omitempty"`
+	MaxUsagePerPhone int             `json:"max_usage_per_phone,omitempty"`
+	DisableOnError   string          `json:"disable_on_error,omitempty"`
+	PoolSummary      *SMSPoolSummary `json:"pool_summary,omitempty"`
+}
+
+type SMSPoolSummary struct {
+	TotalCount    int `json:"total_count"`
+	ReadyCount    int `json:"ready_count"`
+	ReservedCount int `json:"reserved_count"`
+	UsedUpCount   int `json:"used_up_count"`
+	DisabledCount int `json:"disabled_count"`
+	ErrorCount    int `json:"error_count"`
+	RemainingUses int `json:"remaining_uses"`
+}
+
+type PhonePoolItem struct {
+	ID            int64  `json:"id"`
+	SMSConfigID   string `json:"sms_config_id"`
+	PhoneNumber   string `json:"phone_number"`
+	CodeFetchURL  string `json:"code_fetch_url"`
+	Status        string `json:"status"`
+	UseCount      int    `json:"use_count"`
+	MaxUseCount   int    `json:"max_use_count"`
+	LastError     string `json:"last_error,omitempty"`
+	LastJobID     int64  `json:"last_job_id,omitempty"`
+	LastMailboxID int64  `json:"last_mailbox_id,omitempty"`
+	ReservedAt    string `json:"reserved_at,omitempty"`
+	LastUsedAt    string `json:"last_used_at,omitempty"`
+	CreatedAt     string `json:"created_at"`
+	UpdatedAt     string `json:"updated_at"`
+}
+
+type PhonePoolListResult struct {
+	Total int             `json:"total"`
+	Items []PhonePoolItem `json:"items"`
+}
+
+type PhonePoolAttempt struct {
+	ID               int64  `json:"id"`
+	PhonePoolItemID  int64  `json:"phone_pool_item_id"`
+	SMSConfigID      string `json:"sms_config_id"`
+	JobID            int64  `json:"job_id"`
+	MailboxID        int64  `json:"mailbox_id"`
+	PhoneNumber      string `json:"phone_number"`
+	Result           string `json:"result"`
+	ErrorCode        string `json:"error_code,omitempty"`
+	ErrorMessage     string `json:"error_message,omitempty"`
+	VerificationCode string `json:"verification_code,omitempty"`
+	CreatedAt        string `json:"created_at"`
+	FinishedAt       string `json:"finished_at,omitempty"`
 }
 
 type ProxyGroup struct {
@@ -214,6 +278,19 @@ func NormalizeSettings(s Settings) Settings {
 	for i := range s.SMSConfigs {
 		s.SMSConfigs[i].ID = normalizeSettingsItemID(s.SMSConfigs[i].ID, seenSMSIDs)
 		s.SMSConfigs[i].Name = strings.TrimSpace(s.SMSConfigs[i].Name)
+		s.SMSConfigs[i].Type = normalizeSMSConfigType(s.SMSConfigs[i].Type)
+		s.SMSConfigs[i].PlatformLabel = strings.TrimSpace(s.SMSConfigs[i].PlatformLabel)
+		s.SMSConfigs[i].DisableOnError = normalizeSMSDisableOnError(s.SMSConfigs[i].DisableOnError)
+		s.SMSConfigs[i].PoolSummary = nil
+		if s.SMSConfigs[i].Type == SMSConfigTypePool {
+			if s.SMSConfigs[i].Platform == "" {
+				s.SMSConfigs[i].Platform = "custom"
+			}
+			if s.SMSConfigs[i].MaxUsagePerPhone < 1 {
+				s.SMSConfigs[i].MaxUsagePerPhone = 1
+			}
+			continue
+		}
 		if s.SMSConfigs[i].Platform == "" {
 			s.SMSConfigs[i].Platform = "smsbower"
 		}
@@ -271,6 +348,24 @@ func ValidateSettings(s Settings) error {
 			return fmt.Errorf("sms config %q already exists", existing)
 		}
 		seenSMSNames[key] = name
+		switch config.Type {
+		case SMSConfigTypeProvider:
+			if strings.TrimSpace(config.APIKey) == "" {
+				return fmt.Errorf("sms config %q missing api_key", config.Name)
+			}
+		case SMSConfigTypePool:
+			if strings.TrimSpace(config.PlatformLabel) == "" {
+				return fmt.Errorf("sms config %q missing platform_label", config.Name)
+			}
+			if config.MaxUsagePerPhone < 1 {
+				return fmt.Errorf("sms config %q max_usage_per_phone must be greater than 0", config.Name)
+			}
+			if config.DisableOnError != SMSDisableOnPermanentOnly && config.DisableOnError != SMSDisableOnAnyFailure {
+				return fmt.Errorf("sms config %q has unsupported disable_on_error", config.Name)
+			}
+		default:
+			return fmt.Errorf("sms config %q has unsupported type %q", config.Name, config.Type)
+		}
 	}
 	return nil
 }
@@ -332,6 +427,21 @@ func normalizeProxyGroupMode(mode string) string {
 		return "round_robin"
 	}
 	return "random"
+}
+
+func normalizeSMSConfigType(kind string) string {
+	kind = strings.ToLower(strings.TrimSpace(kind))
+	if kind == SMSConfigTypePool {
+		return SMSConfigTypePool
+	}
+	return SMSConfigTypeProvider
+}
+
+func normalizeSMSDisableOnError(mode string) string {
+	if strings.TrimSpace(mode) == SMSDisableOnAnyFailure {
+		return SMSDisableOnAnyFailure
+	}
+	return SMSDisableOnPermanentOnly
 }
 
 func normalizeSettingsItemID(id string, seen map[string]struct{}) string {

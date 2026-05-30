@@ -31,6 +31,7 @@ type SMSActivation = legacy.CodexSMSActivation
 
 type SMSProvider interface {
 	GetNumber(context.Context) (*SMSActivation, error)
+	MarkSubmitted(context.Context, string) error
 	PollCode(context.Context, string) (string, error)
 	Complete(context.Context, string) error
 	Cancel(context.Context, string) error

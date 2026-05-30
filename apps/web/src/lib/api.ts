@@ -1,5 +1,5 @@
 import { defaultPassword } from "./constants";
-import type { SMSCatalog, SettingsPayload } from "../types";
+import type { PhonePoolItem, SMSCatalog, SettingsPayload } from "../types";
 
 type RawSettingsPayload = Partial<SettingsPayload> & {
   proxy_mode?: string;
@@ -61,11 +61,36 @@ export function normalizeSettingsPayload(settings: RawSettingsPayload): Settings
       ? settings.sms_configs.map((config) => ({
           id: config.id || createSettingsItemID(),
           name: config.name || "",
-          platform: config.platform || "smsbower",
+          type: config.type === "pool" ? "pool" : "provider",
+          platform:
+            config.type === "pool"
+              ? config.platform || "custom"
+              : config.platform || "smsbower",
+          platform_label: config.platform_label || "",
           api_key: config.api_key || "",
           service_id: config.service_id || "dr",
           country_id: Number(config.country_id) || 38,
           max_price: Number(config.max_price) || 0,
+          max_usage_per_phone:
+            Number(config.max_usage_per_phone) > 0
+              ? Number(config.max_usage_per_phone)
+              : 1,
+          disable_on_error:
+            config.disable_on_error === "any_failure"
+              ? "any_failure"
+              : "permanent_only",
+          pool_summary: config.pool_summary
+            ? {
+                total_count: Number(config.pool_summary.total_count) || 0,
+                ready_count: Number(config.pool_summary.ready_count) || 0,
+                reserved_count: Number(config.pool_summary.reserved_count) || 0,
+                used_up_count: Number(config.pool_summary.used_up_count) || 0,
+                disabled_count: Number(config.pool_summary.disabled_count) || 0,
+                error_count: Number(config.pool_summary.error_count) || 0,
+                remaining_uses:
+                  Number(config.pool_summary.remaining_uses) || 0,
+              }
+            : undefined,
         }))
       : [],
   };
@@ -76,4 +101,36 @@ export function fetchSMSCatalog(platform: string, apiKey: string) {
     method: "POST",
     body: JSON.stringify({ platform, api_key: apiKey }),
   });
+}
+
+export function importPhonePoolItems(configID: string, text: string) {
+  return api<{ imported: number; skipped: number; failed: number; errors: string[] }>(
+    `/api/sms-configs/${configID}/phone-pool/import`,
+    {
+      method: "POST",
+      body: JSON.stringify({ text }),
+    },
+  );
+}
+
+export function fetchPhonePoolItems(configID: string, status = "") {
+  const search = status ? `?status=${encodeURIComponent(status)}` : "";
+  return api<{ total: number; items: PhonePoolItem[] }>(
+    `/api/sms-configs/${configID}/phone-pool${search}`,
+  );
+}
+
+export function deletePhonePoolItem(id: number) {
+  return api<{ ok: boolean }>(`/api/phone-pool-items/${id}`, {
+    method: "DELETE",
+  });
+}
+
+export function previewPhonePoolSMS(id: number) {
+  return api<{ found: boolean; code: string; preview_text: string }>(
+    `/api/phone-pool-preview/${id}`,
+    {
+      method: "POST",
+    },
+  );
 }

@@ -59,6 +59,12 @@ func (s *Store) init() error {
 		`CREATE INDEX IF NOT EXISTS idx_register_job_items_job_id ON register_job_items (job_id, id)`,
 		`CREATE TABLE IF NOT EXISTS runtime_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, job_id INTEGER NOT NULL DEFAULT 0, mailbox_id INTEGER NOT NULL DEFAULT 0, email TEXT, level TEXT NOT NULL, step TEXT, step_index INTEGER NOT NULL DEFAULT 0, step_total INTEGER NOT NULL DEFAULT 0, message TEXT NOT NULL, created_at TEXT NOT NULL)`,
 		`CREATE INDEX IF NOT EXISTS idx_runtime_logs_job_id_id ON runtime_logs (job_id, id)`,
+		`CREATE TABLE IF NOT EXISTS phone_pool_items (id INTEGER PRIMARY KEY AUTOINCREMENT, sms_config_id TEXT NOT NULL, phone_number TEXT NOT NULL, code_fetch_url TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'ready', use_count INTEGER NOT NULL DEFAULT 0, max_use_count INTEGER NOT NULL DEFAULT 1, last_error TEXT, last_job_id INTEGER NOT NULL DEFAULT 0, last_mailbox_id INTEGER NOT NULL DEFAULT 0, reserved_at TEXT, last_used_at TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, UNIQUE(sms_config_id, phone_number))`,
+		`CREATE INDEX IF NOT EXISTS idx_phone_pool_items_config_status_id ON phone_pool_items (sms_config_id, status, id)`,
+		`CREATE INDEX IF NOT EXISTS idx_phone_pool_items_config_usecount_id ON phone_pool_items (sms_config_id, use_count, id)`,
+		`CREATE TABLE IF NOT EXISTS phone_pool_attempts (id INTEGER PRIMARY KEY AUTOINCREMENT, phone_pool_item_id INTEGER NOT NULL, sms_config_id TEXT NOT NULL, job_id INTEGER NOT NULL DEFAULT 0, mailbox_id INTEGER NOT NULL DEFAULT 0, phone_number TEXT NOT NULL, result TEXT NOT NULL, error_code TEXT, error_message TEXT, verification_code TEXT, created_at TEXT NOT NULL, finished_at TEXT)`,
+		`CREATE INDEX IF NOT EXISTS idx_phone_pool_attempts_item_id ON phone_pool_attempts (phone_pool_item_id, id)`,
+		`CREATE INDEX IF NOT EXISTS idx_phone_pool_attempts_config_id ON phone_pool_attempts (sms_config_id, id)`,
 	}
 	for _, stmt := range stmts {
 		if _, err := s.db.Exec(stmt); err != nil && !strings.Contains(err.Error(), "duplicate column") {

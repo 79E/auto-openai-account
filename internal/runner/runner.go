@@ -72,7 +72,11 @@ func (r *Runner) Start(count int, flow string, smsConfigID string, smsConfigName
 		return domain.RegisterJob{}, err
 	}
 	if flow == domain.JobTypeRegisterCodex {
-		if _, err := requireSMSConfig(settings, smsConfigID, smsConfigName); err != nil {
+		smsConfig, err := requireSMSConfig(settings, smsConfigID, smsConfigName)
+		if err != nil {
+			return domain.RegisterJob{}, err
+		}
+		if err := r.ensureSMSCapacity(smsConfig, count); err != nil {
 			return domain.RegisterJob{}, err
 		}
 	}
@@ -133,7 +137,11 @@ func (r *Runner) StartLogin(ids []int64, flow string, smsConfigID string, smsCon
 		return domain.RegisterJob{}, err
 	}
 	if flow == domain.JobTypeCodexLogin {
-		if _, err := requireSMSConfig(settings, smsConfigID, smsConfigName); err != nil {
+		smsConfig, err := requireSMSConfig(settings, smsConfigID, smsConfigName)
+		if err != nil {
+			return domain.RegisterJob{}, err
+		}
+		if err := r.ensureSMSCapacity(smsConfig, len(items)); err != nil {
 			return domain.RegisterJob{}, err
 		}
 	}
@@ -433,11 +441,17 @@ func (r *Runner) runCodexLoginAfterStarted(ctx context.Context, jobID int64, mai
 		return
 	}
 	provider, err := smsbiz.NewProvider(smsbiz.Config{
-		Platform:  smsConfig.Platform,
-		APIKey:    smsConfig.APIKey,
-		ServiceID: smsConfig.ServiceID,
-		CountryID: smsConfig.CountryID,
-		MaxPrice:  smsConfig.MaxPrice,
+		Platform:         smsConfig.Platform,
+		APIKey:           smsConfig.APIKey,
+		ServiceID:        smsConfig.ServiceID,
+		CountryID:        smsConfig.CountryID,
+		MaxPrice:         smsConfig.MaxPrice,
+		SMSConfigID:      smsConfig.ID,
+		MaxUsagePerPhone: smsConfig.MaxUsagePerPhone,
+		DisableOnError:   smsConfig.DisableOnError,
+		Store:            r.store,
+		JobID:            jobID,
+		MailboxID:        mailbox.ID,
 	})
 	if err != nil {
 		r.failCodexJobItem(jobID, mailbox, prefix, fmt.Sprintf("短信平台初始化失败: %v", err), duration)
@@ -555,8 +569,11 @@ func requireSMSConfig(settings domain.Settings, id string, name string) (domain.
 		if !ok {
 			return domain.SMSConfig{}, fmt.Errorf("sms config id %q not found", id)
 		}
-		if strings.TrimSpace(cfg.APIKey) == "" {
+		if cfg.Type == domain.SMSConfigTypeProvider && strings.TrimSpace(cfg.APIKey) == "" {
 			return domain.SMSConfig{}, fmt.Errorf("sms config %q missing api_key", cfg.Name)
+		}
+		if cfg.Type == domain.SMSConfigTypePool && strings.TrimSpace(cfg.PlatformLabel) == "" {
+			return domain.SMSConfig{}, fmt.Errorf("sms config %q missing platform_label", cfg.Name)
 		}
 		return cfg, nil
 	}
@@ -568,10 +585,27 @@ func requireSMSConfig(settings domain.Settings, id string, name string) (domain.
 	if !ok {
 		return domain.SMSConfig{}, fmt.Errorf("sms config %q not found", name)
 	}
-	if strings.TrimSpace(cfg.APIKey) == "" {
+	if cfg.Type == domain.SMSConfigTypeProvider && strings.TrimSpace(cfg.APIKey) == "" {
 		return domain.SMSConfig{}, fmt.Errorf("sms config %q missing api_key", cfg.Name)
 	}
+	if cfg.Type == domain.SMSConfigTypePool && strings.TrimSpace(cfg.PlatformLabel) == "" {
+		return domain.SMSConfig{}, fmt.Errorf("sms config %q missing platform_label", cfg.Name)
+	}
 	return cfg, nil
+}
+
+func (r *Runner) ensureSMSCapacity(config domain.SMSConfig, required int) error {
+	if required < 1 || config.Type != domain.SMSConfigTypePool {
+		return nil
+	}
+	summary, err := r.store.GetSMSPoolSummary(config.ID)
+	if err != nil {
+		return err
+	}
+	if summary.ReadyCount < required {
+		return fmt.Errorf("手机号池可用号码不足：当前可用 %d 个，本次任务需要 %d 个", summary.ReadyCount, required)
+	}
+	return nil
 }
 
 func mailboxLoginPassword(mailbox domain.Mailbox) string {
@@ -618,6 +652,10 @@ func (p *codexSMSProvider) GetNumber(ctx context.Context) (*codex.SMSActivation,
 
 func (p *codexSMSProvider) PollCode(ctx context.Context, activationID string) (string, error) {
 	return smsbiz.PollForCode(ctx, p.provider, activationID, 150*time.Second, 5*time.Second)
+}
+
+func (p *codexSMSProvider) MarkSubmitted(ctx context.Context, activationID string) error {
+	return p.provider.MarkSubmitted(ctx, activationID)
 }
 
 func (p *codexSMSProvider) Complete(ctx context.Context, activationID string) error {

@@ -74,8 +74,27 @@ export function CreateTaskModal({
   const selectedSMSExists =
     !isCodexFlow ||
     draft.sms_configs.some((config) => config.id === smsConfigID);
+  const selectedSMSConfig = draft.sms_configs.find((config) => config.id === smsConfigID);
+  const requiredPhoneCount = isRegisterFlow ? Math.max(1, Math.min(count, unused.length)) : loginCandidates.length;
+  const poolReadyCount = selectedSMSConfig?.pool_summary?.ready_count || 0;
+  const smsCapacityError =
+    isCodexFlow &&
+    selectedSMSConfig?.type === "pool" &&
+    poolReadyCount < requiredPhoneCount
+      ? `手机号池可用号码不足：当前可用 ${poolReadyCount} 个，本次需要 ${requiredPhoneCount} 个。`
+      : "";
+
+  function smsOptionLabel(config: SettingsPayload["sms_configs"][number]) {
+    if (config.type === "pool") {
+      return `${config.name} · 自定义号池 · 可用 ${config.pool_summary?.ready_count || 0}`;
+    }
+    return `${config.name} · ${config.platform}`;
+  }
 
   function submit() {
+    if (smsCapacityError) {
+      return;
+    }
     if (isRegisterFlow) {
       onCreateRegister(
         draft,
@@ -254,13 +273,23 @@ export function CreateTaskModal({
                 <option value="">请选择 SMS 配置</option>
                 {draft.sms_configs.map((config) => (
                   <option key={config.id} value={config.id}>
-                    {config.name} · {config.platform}
+                    {smsOptionLabel(config)}
                   </option>
                 ))}
               </select>
               {!selectedSMSExists && (
                 <p className="mt-2 text-sm font-semibold text-rose-600">
                   Codex 流程必须选择有效的 SMS 配置。
+                </p>
+              )}
+              {selectedSMSConfig?.type === "pool" && (
+                <div className="mt-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
+                  平台：{selectedSMSConfig.platform_label || "自定义号池"}，可用号码 {poolReadyCount} 个，剩余总次数 {selectedSMSConfig.pool_summary?.remaining_uses || 0}。
+                </div>
+              )}
+              {smsCapacityError && (
+                <p className="mt-2 text-sm font-semibold text-rose-600">
+                  {smsCapacityError}
                 </p>
               )}
             </Field>
@@ -278,7 +307,8 @@ export function CreateTaskModal({
             disabled={
               busy ||
               (isRegisterFlow ? unused.length === 0 : loginCandidates.length === 0) ||
-              !selectedSMSExists
+              !selectedSMSExists ||
+              Boolean(smsCapacityError)
             }
             className="rounded-xl bg-slate-950 px-3 py-2 font-bold text-white disabled:opacity-50"
           >

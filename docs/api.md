@@ -45,11 +45,30 @@ Unsupported methods return `405 Method Not Allowed`. Missing resources generally
     {
       "id": "90b1607f4ff6473ea554787b03d7dc2d",
       "name": "smsbower-main",
+      "type": "provider",
       "platform": "smsbower",
       "api_key": "secret",
       "service_id": "dr",
       "country_id": 38,
       "max_price": 0
+    },
+    {
+      "id": "4f06fcbfd45c4be8af6fdf2cc7fd0c11",
+      "name": "boss100-main",
+      "type": "pool",
+      "platform": "custom",
+      "platform_label": "boss100",
+      "max_usage_per_phone": 3,
+      "disable_on_error": "permanent_only",
+      "pool_summary": {
+        "total_count": 100,
+        "ready_count": 72,
+        "reserved_count": 2,
+        "used_up_count": 20,
+        "disabled_count": 6,
+        "error_count": 0,
+        "remaining_uses": 144
+      }
     }
   ]
 }
@@ -61,6 +80,8 @@ Allowed values:
 - `password_mode`: `random`, `fixed`
 - `imap_auth_mode`: `auto`, `password`, `xoauth2`
 - `sms_configs[].platform`: `smsbower` or `hero-sms`
+- `sms_configs[].type`: `provider` or `pool`
+- `sms_configs[].disable_on_error`: `permanent_only` or `any_failure`
 - `sms_configs[].max_price`: `0` means the API request does not send a max price limit
 
 Identity note:
@@ -231,6 +252,35 @@ Item statuses:
 
 SMS service and country lists are fetched from the selected SMS provider.
 
+### PhonePoolItem
+
+```json
+{
+  "id": 1,
+  "sms_config_id": "4f06fcbfd45c4be8af6fdf2cc7fd0c11",
+  "phone_number": "+18352622848",
+  "code_fetch_url": "https://example.com/api/record?token=...",
+  "status": "ready",
+  "use_count": 1,
+  "max_use_count": 3,
+  "last_error": "",
+  "last_job_id": 12,
+  "last_mailbox_id": 8,
+  "reserved_at": "",
+  "last_used_at": "2026-05-26T00:00:00Z",
+  "created_at": "2026-05-26T00:00:00Z",
+  "updated_at": "2026-05-26T00:00:00Z"
+}
+```
+
+Phone pool statuses:
+
+- `ready`
+- `reserved`
+- `used_up`
+- `disabled`
+- `error`
+
 ## Endpoints
 
 ### GET /api/health
@@ -252,11 +302,63 @@ Returns normalized settings.
 
 Response: `Settings`
 
+Pool configs include `pool_summary`, which is derived from phone pool records.
+
 ### PUT /api/settings
 
 Updates settings. `POST` is also accepted by the current handler.
 
 Request body: `Settings`
+
+### POST /api/sms-configs/{id}/phone-pool/import
+
+Imports phone numbers into a pool SMS config.
+
+Request body:
+
+```json
+{
+  "text": "+18352622848----https://example.com/api/record?token=..."
+}
+```
+
+Supported line formats:
+
+- `手机号----链接`
+- `手机号|链接`
+- `手机号:链接` where the right side starts with `http://` or `https://`
+
+Phone numbers are normalized to a `+` prefixed format before storage.
+
+Response:
+
+```json
+{
+  "imported": 10,
+  "skipped": 2,
+  "failed": 1,
+  "errors": ["line 3: invalid format"]
+}
+```
+
+### GET /api/sms-configs/{id}/phone-pool
+
+Lists phone pool items for one SMS config.
+
+Query params:
+
+- `page`
+- `page_size`
+- `status`
+
+Response:
+
+```json
+{
+  "total": 100,
+  "items": [PhonePoolItem]
+}
+```
 
 Response:
 
