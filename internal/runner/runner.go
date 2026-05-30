@@ -666,6 +666,16 @@ func (p *codexSMSProvider) Cancel(ctx context.Context, activationID string) erro
 	return p.provider.SetStatus(ctx, activationID, 8)
 }
 
+func (p *codexSMSProvider) CancelPermanent(ctx context.Context, activationID string, errorCode string, errorMessage string) error {
+	type permanentCanceler interface {
+		CancelPermanent(context.Context, string, string, string) error
+	}
+	if canceler, ok := p.provider.(permanentCanceler); ok {
+		return canceler.CancelPermanent(ctx, activationID, errorCode, errorMessage)
+	}
+	return p.provider.SetStatus(ctx, activationID, 8)
+}
+
 func (r *Runner) log(entry domain.RuntimeLog) {
 	entry.Message = semanticRuntimeMessage(entry)
 	entry, err := r.store.AddLog(entry)

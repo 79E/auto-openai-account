@@ -50,6 +50,7 @@ type PhonePoolStore interface {
 	GetPhonePoolItem(id int64) (domain.PhonePoolItem, error)
 	MarkPhonePoolItemSubmitted(itemID int64, jobID int64, mailboxID int64) error
 	CompletePhonePoolItem(itemID int64) error
+	ExhaustPhonePoolItem(itemID int64, errMessage string) error
 	ReleasePhonePoolItem(itemID int64, errMessage string) error
 	FailPhonePoolItem(itemID int64, disable bool, errMessage string) error
 	CreatePhonePoolAttempt(itemID int64, configID string, jobID int64, mailboxID int64, phoneNumber string) (int64, error)

@@ -234,6 +234,12 @@ func (s *Store) CompletePhonePoolItem(itemID int64) error {
 	return err
 }
 
+func (s *Store) ExhaustPhonePoolItem(itemID int64, errMessage string) error {
+	ts := now()
+	_, err := s.db.Exec(`UPDATE phone_pool_items SET status = ?, use_count = max_use_count, last_error = ?, reserved_at = NULL, last_used_at = ?, updated_at = ? WHERE id = ?`, domain.PhonePoolStatusUsedUp, strings.TrimSpace(errMessage), ts, ts, itemID)
+	return err
+}
+
 func (s *Store) ReleasePhonePoolItem(itemID int64, errMessage string) error {
 	_, err := s.db.Exec(`UPDATE phone_pool_items SET status = ?, last_error = ?, reserved_at = NULL, updated_at = ? WHERE id = ?`, domain.PhonePoolStatusReady, strings.TrimSpace(errMessage), now(), itemID)
 	return err

@@ -30,6 +30,10 @@ type CodexSMSProvider interface {
 	Cancel(context.Context, string) error
 }
 
+type codexSMSPermanentCanceler interface {
+	CancelPermanent(context.Context, string, string, string) error
+}
+
 type CodexLoginInput struct {
 	Email                    string
 	Password                 string
@@ -332,9 +336,20 @@ func (w *worker) codexBindPhone(ctx context.Context, provider CodexSMSProvider, 
 			continue
 		}
 		if status != http.StatusOK {
+			reason := phoneSubmitFailureReason(status, payload)
+			if code := phoneSubmitErrorCode(payload); isPermanentPhoneSubmitFailure(status, code) {
+				if canceler, ok := provider.(codexSMSPermanentCanceler); ok {
+					_ = canceler.CancelPermanent(ctx, activation.ID, code, reason)
+				} else {
+					_ = provider.Cancel(ctx, activation.ID)
+				}
+				lastErr = fmt.Errorf("submit_phone_http_%d%s", status, responseDetail(payload))
+				progress("add_phone", 4, 8, phoneRetryMessageWithAction(attempt, maxAttempts, "手机号被 OpenAI 拒绝："+reason, "已标记该手机号为不可用"))
+				continue
+			}
 			_ = provider.Cancel(ctx, activation.ID)
 			lastErr = fmt.Errorf("submit_phone_http_%d%s", status, responseDetail(payload))
-			progress("add_phone", 4, 8, phoneRetryMessage(attempt, maxAttempts, "手机号被 OpenAI 拒绝："+phoneSubmitFailureReason(status, payload)))
+			progress("add_phone", 4, 8, phoneRetryMessage(attempt, maxAttempts, "手机号被 OpenAI 拒绝："+reason))
 			continue
 		}
 		if err := provider.MarkSubmitted(ctx, activation.ID); err != nil {
@@ -391,10 +406,31 @@ func (w *worker) codexSubmitPhone(ctx context.Context, phoneNumber string) (int,
 }
 
 func phoneRetryMessage(attempt, maxAttempts int, reason string) string {
+	return phoneRetryMessageWithAction(attempt, maxAttempts, reason, "已取消当前手机号")
+}
+
+func phoneRetryMessageWithAction(attempt, maxAttempts int, reason string, action string) string {
 	if attempt < maxAttempts {
-		return fmt.Sprintf("%s。已取消当前手机号，准备更换手机号（下一次 %d/%d）", reason, attempt+1, maxAttempts)
+		return fmt.Sprintf("%s。%s，准备更换手机号（下一次 %d/%d）", reason, action, attempt+1, maxAttempts)
 	}
-	return fmt.Sprintf("%s。已取消当前手机号，已达到最大手机号尝试次数（%d/%d）", reason, attempt, maxAttempts)
+	return fmt.Sprintf("%s。%s，已达到最大手机号尝试次数（%d/%d）", reason, action, attempt, maxAttempts)
+}
+
+func phoneSubmitErrorCode(payload map[string]any) string {
+	errPayload := StringMap(payload["error"])
+	return Clean(errPayload["code"])
+}
+
+func isPermanentPhoneSubmitFailure(status int, code string) bool {
+	if status < http.StatusBadRequest {
+		return false
+	}
+	switch Clean(code) {
+	case "phone_max_usage_exceeded":
+		return true
+	default:
+		return false
+	}
 }
 
 func phoneSubmitFailureReason(status int, payload map[string]any) string {

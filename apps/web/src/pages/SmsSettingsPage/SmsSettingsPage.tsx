@@ -138,15 +138,15 @@ function phonePoolStatusBadge(status: string) {
     case "ready":
       return { status: "success", text: "可用" };
     case "reserved":
-      return { status: "running", text: "使用中" };
+      return { status: "new", text: "使用中" };
     case "used_up":
-      return { status: "finished", text: "已用尽" };
+      return { status: "warning", text: "已用尽" };
     case "disabled":
-      return { status: "failed", text: "已禁用" };
+      return { status: "muted", text: "已禁用" };
     case "error":
       return { status: "abnormal", text: "异常" };
     default:
-      return { status: "new", text: status || "未知" };
+      return { status: "muted", text: status || "未知" };
   }
 }
 

@@ -151,6 +151,38 @@ func (p *PhonePool) SetStatus(ctx context.Context, activationID string, status i
 	return nil
 }
 
+func (p *PhonePool) CancelPermanent(ctx context.Context, activationID string, errorCode string, errorMessage string) error {
+	state, itemID, err := p.lookupState(activationID)
+	if err != nil {
+		return err
+	}
+	if state.finished {
+		return nil
+	}
+	message := strings.TrimSpace(errorMessage)
+	if message == "" {
+		message = "activation cancelled"
+	}
+	switch strings.TrimSpace(errorCode) {
+	case "phone_max_usage_exceeded":
+		if err := p.store.ExhaustPhonePoolItem(itemID, message); err != nil {
+			return err
+		}
+	default:
+		disable := p.disableOnError == domain.SMSDisableOnAnyFailure || p.disableOnError == domain.SMSDisableOnPermanentOnly
+		if err := p.store.FailPhonePoolItem(itemID, disable, message); err != nil {
+			return err
+		}
+	}
+	if state.attemptID > 0 {
+		if err := p.store.FinishPhonePoolAttempt(state.attemptID, "provider_error", strings.TrimSpace(errorCode), message, state.lastCode); err != nil {
+			return err
+		}
+	}
+	state.finished = true
+	return nil
+}
+
 func (p *PhonePool) Close() {
 	p.client.CloseIdleConnections()
 }
