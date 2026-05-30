@@ -58,7 +58,10 @@ export function CreateTaskModal({
     sms_configs: settings.sms_configs || [],
     proxy_groups: settings.proxy_groups || [],
   });
-  const [count, setCount] = useState(Math.min(1, unused.length));
+  const [registerConcurrencyInput, setRegisterConcurrencyInput] = useState(
+    String(settings.register_concurrency || 1),
+  );
+  const [countInput, setCountInput] = useState(String(Math.min(1, unused.length)));
   const [loginFilter, setLoginFilter] = useState("used");
   const [smsConfigID, setSMSConfigID] = useState(
     draft.sms_configs[0]?.id || "",
@@ -66,11 +69,21 @@ export function CreateTaskModal({
   const [proxyTarget, setProxyTarget] = useState("");
   const isRegisterFlow = ["register_login", "register_codex"].includes(flow);
   const isCodexFlow = flow === "register_codex" || flow === "codex_login";
+  const registerConcurrency =
+    Number(registerConcurrencyInput) > 0 ? Math.floor(Number(registerConcurrencyInput)) : 1;
+  const count =
+    unused.length > 0 && Number(countInput) > 0
+      ? Math.min(Math.floor(Number(countInput)), unused.length)
+      : Math.min(1, unused.length);
+  const registerConcurrencyInvalid =
+    registerConcurrencyInput.trim() === "" || Number(registerConcurrencyInput) <= 0;
+  const countInvalid = isRegisterFlow && (countInput.trim() === "" || Number(countInput) <= 0);
+  const registerInputsInvalid = registerConcurrencyInvalid || countInvalid;
   const loginCandidates = forcedCodexLogin
     ? used.filter((item) => codexTargetIds.includes(item.id))
     : forcedLogin
       ? used.filter((item) => loginTargetIdsResolved.includes(item.id))
-    : used.filter((item) => loginFilter === "used" || item.status === loginFilter);
+      : used.filter((item) => loginFilter === "used" || item.status === loginFilter);
   const selectedSMSExists =
     !isCodexFlow ||
     draft.sms_configs.some((config) => config.id === smsConfigID);
@@ -92,12 +105,16 @@ export function CreateTaskModal({
   }
 
   function submit() {
-    if (smsCapacityError) {
+    if (smsCapacityError || registerInputsInvalid) {
       return;
     }
+    const nextDraft = {
+      ...draft,
+      register_concurrency: registerConcurrency,
+    };
     if (isRegisterFlow) {
       onCreateRegister(
-        draft,
+        nextDraft,
         Math.max(1, Math.min(count, unused.length)),
         flow,
         smsConfigID,
@@ -106,7 +123,7 @@ export function CreateTaskModal({
       return;
     }
     onCreateLogin(
-      draft,
+      nextDraft,
       loginCandidates.map((item) => item.id),
       flow,
       smsConfigID,
@@ -176,13 +193,8 @@ export function CreateTaskModal({
               className={styles.input}
               type="number"
               min={1}
-              value={draft.register_concurrency}
-              onChange={(e) =>
-                setDraft({
-                  ...draft,
-                  register_concurrency: Number(e.target.value),
-                })
-              }
+              value={registerConcurrencyInput}
+              onChange={(e) => setRegisterConcurrencyInput(e.target.value)}
             />
           </Field>
           <Field label="代理选择">
@@ -208,8 +220,8 @@ export function CreateTaskModal({
                 type="number"
                 min={1}
                 max={unused.length}
-                value={count}
-                onChange={(e) => setCount(Number(e.target.value))}
+                value={countInput}
+                onChange={(e) => setCountInput(e.target.value)}
               />
             </Field>
             <Field label="密码模式">
@@ -307,6 +319,7 @@ export function CreateTaskModal({
             disabled={
               busy ||
               (isRegisterFlow ? unused.length === 0 : loginCandidates.length === 0) ||
+              registerInputsInvalid ||
               !selectedSMSExists ||
               Boolean(smsCapacityError)
             }
